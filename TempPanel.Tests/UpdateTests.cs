@@ -1,3 +1,4 @@
+using TempPanel.Sensors;
 using TempPanel.Services;
 using Xunit;
 
@@ -42,5 +43,17 @@ public sealed class UpdateServiceTests
         Assert.Equal("aldrinnicolassalazaravilas-collab", UpdateService.RepoOwner);
         Assert.Equal("Temp-panel", UpdateService.RepoName);
         Assert.Contains("api.github.com", UpdateService.ApiUrl);
+    }
+
+    [Fact]
+    public void NotifyBattery_Uses_Configured_Threshold()
+    {
+        string gotTitle = "", gotMsg = "";
+        var n = new Notifier((t, m, s) => { gotTitle = t; gotMsg = m; }, (_, _, _) => { });
+        var cfg = new AppConfig { BatteryThreshold = 67, BatterySound = false, BatteryMode = "popup" };
+        n.NotifyBattery(cfg, 67.0);
+        Assert.Contains("67", gotTitle);
+        Assert.Contains("67", gotMsg);
+        Assert.DoesNotContain("80", gotTitle + gotMsg);
     }
 }

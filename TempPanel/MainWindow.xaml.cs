@@ -336,7 +336,7 @@ public partial class MainWindow : Window
 
     private void ShowBatteryPopup(string title, string message, bool playSound)
     {
-        var win = new BatteryAlertWindow(isTest: false);
+        var win = new BatteryAlertWindow(_config.BatteryThreshold, isTest: false);
         win.Owner = IsVisible ? this : null;
         if (playSound) { try { System.Media.SystemSounds.Exclamation.Play(); } catch { } }
         win.ShowDialog();

@@ -67,6 +67,20 @@ public sealed class HwinfoStatus
     public string? Note { get; set; }
 }
 
+/// <summary>
+/// Estado del acceso a sensores para la página de Ayuda: cuántos sensores de
+/// temperatura de CPU publica el equipo y cuántos traen valor, modo admin y HVCI.
+/// </summary>
+public sealed class DetectionDiagnostics
+{
+    public bool IsAdmin { get; set; }
+    public bool HvciEnabled { get; set; }
+    public int CpuTempSensors { get; set; }
+    public int CpuTempWithValue { get; set; }
+    public int TotalSensors { get; set; }
+    public int SensorsWithValue { get; set; }
+}
+
 public sealed class BatteryData
 {
     public bool Present { get; set; }
@@ -141,6 +155,7 @@ public sealed class Snapshot
     public List<StorageData> Storage { get; set; } = new();
     public SessionStats Session { get; set; } = new();
     public HwinfoStatus Hwinfo { get; set; } = new();
+    public DetectionDiagnostics Diagnostics { get; set; } = new();
     public List<double?> ExtraTemps { get; set; } = new();
     public List<string> ExtraTempNames { get; set; } = new();
     public List<SensorReading> AllSensors { get; set; } = new();

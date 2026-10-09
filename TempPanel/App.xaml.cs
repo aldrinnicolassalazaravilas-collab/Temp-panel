@@ -40,7 +40,8 @@ public partial class App : System.Windows.Application
         }
         if (args.Any(a => a.Equals("--test-battery-alert", StringComparison.OrdinalIgnoreCase)))
         {
-            var win = new BatteryAlertWindow(isTest: true);
+            var cfg = Sensors.AppConfig.Load();
+            var win = new BatteryAlertWindow(cfg.BatteryThreshold, isTest: true);
             win.Closed += (_, __) => Shutdown();
             win.Show();
             return;

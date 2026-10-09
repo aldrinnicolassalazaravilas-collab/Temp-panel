@@ -193,6 +193,11 @@
         <span id="hwinfo-status" class="accent"></span></div>
       </div>
       <div class="card">
+        <h3>Estado de la detección en este equipo</h3>
+        <div id="diag-info" class="kv"></div>
+        <div id="diag-advice" class="muted" style="margin-top:8px"></div>
+      </div>
+      <div class="card">
         <h3>Qué significan los estados</h3>
         <div class="kv">
           <div>Valor con número</div><div>Lectura real del equipo en ese momento.</div>
@@ -235,17 +240,17 @@
         </div>
       </div>
       <div class="card">
-        <h3>🔋 Alerta de batería al 80 %</h3>
+        <h3>🔋 Alerta de batería</h3>
         <label class="fld"><input type="checkbox" id="cfg-bat-on" checked> Activar alertas de batería</label>
-        <label class="fld">Umbral de alerta (%): <input id="cfg-bat-th" type="number" min="50" max="100" value="80"></label>
-        <label class="fld">Reactivación por debajo de (%): <input id="cfg-bat-re" type="number" min="10" max="99" value="75"></label>
+        <label class="fld">Avisar cuando la carga llegue a (%): <input id="cfg-bat-th" type="number" min="50" max="100" value="80"></label>
+        <label class="fld">Volver a avisar cuando baje de (%): <input id="cfg-bat-re" type="number" min="10" max="99" value="75"></label>
         <label class="fld"><input type="checkbox" id="cfg-bat-sound" checked> Sonido</label>
         <label class="fld">Tipo de aviso:
           <select id="cfg-bat-mode"><option value="popup">Ventana emergente con botón OK</option><option value="balloon">Notificación de Windows (bandeja)</option></select>
         </label>
         <button id="btn-save-bat" class="btn">Guardar alerta</button>
         <button id="btn-test-bat" class="btn ghost">Probar apariencia</button>
-        <div class="muted small">Avisa una vez por ciclo de carga, solo cargando. Se reactiva bajo el umbral. «Probar» muestra el aspecto sin fingir un nivel real. Notificar no detiene la carga física.</div>
+        <div class="muted small">Avisa una vez por ciclo de carga, solo cargando. Vuelve a avisar cuando baja del segundo valor. «Probar» muestra el aspecto sin fingir un nivel real. Notificar no detiene la carga física.</div>
       </div>
       <div class="grid cards-2">
         <div class="card">

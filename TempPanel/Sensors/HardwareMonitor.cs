@@ -102,6 +102,7 @@ public sealed class HardwareMonitor : IDisposable
             catch (Exception ex) { AppLogger.Error("ReadExtraTemps: " + ex); }
             try { snap.AllSensors = ReadAllSensors(); } catch (Exception ex) { AppLogger.Error("ReadAllSensors: " + ex); }
             try { MergeHwinfo(snap); } catch (Exception ex) { AppLogger.Error("MergeHwinfo: " + ex); }
+            try { snap.Diagnostics = BuildDiagnostics(snap); } catch (Exception ex) { AppLogger.Error("Diagnostics: " + ex); }
 
             var now = DateTime.Now;
             snap.Timestamp = DateTime.UtcNow.ToString("o");
@@ -656,6 +657,43 @@ public sealed class HardwareMonitor : IDisposable
             list.Add((n, r.Label.Trim(), r.Value));
         }
         return list.OrderBy(x => x.n).Select(x => (x.name, x.v)).ToList();
+    }
+
+    // ---------- Diagnóstico de detección ----------
+    private DetectionDiagnostics BuildDiagnostics(Snapshot snap)
+    {
+        int cpuTotal = 0, cpuWith = 0;
+        foreach (var s in snap.AllSensors)
+        {
+            if (s.HardwareType == "Cpu" && s.Type == "Temperature")
+            {
+                cpuTotal++;
+                if (s.Value.HasValue) cpuWith++;
+            }
+        }
+        return new DetectionDiagnostics
+        {
+            IsAdmin = IsRunningAsAdmin(),
+            HvciEnabled = IsHvciEnabled(),
+            CpuTempSensors = cpuTotal,
+            CpuTempWithValue = cpuWith,
+            TotalSensors = snap.AllSensors.Count,
+            SensorsWithValue = snap.AllSensors.Count(s => s.Value.HasValue)
+        };
+    }
+
+    private static bool IsHvciEnabled()
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+                @"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity", false);
+            var v = key?.GetValue("Enabled");
+            if (v is int i) return i != 0;
+            if (v is long l) return l != 0;
+        }
+        catch { }
+        return false;
     }
 
     // ---------- Almacenamiento ----------

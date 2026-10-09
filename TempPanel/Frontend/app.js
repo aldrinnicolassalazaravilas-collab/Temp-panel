@@ -155,6 +155,21 @@ function renderAll(s) {
   if (hw) hw.textContent = (s.hwinfo && s.hwinfo.available)
     ? `Estado actual: ${s.hwinfo.note || "HWiNFO64 activo."}`
     : `Estado actual: ${(s.hwinfo && s.hwinfo.note) || "HWiNFO64 no detectado."}`;
+  const dg = $("diag-info"), da = $("diag-advice");
+  if (dg && s.diagnostics) {
+    const d = s.diagnostics;
+    dg.innerHTML =
+      `<div>Permisos</div><div>${d.isAdmin ? "Administrador" : "Usuario estándar"}</div>` +
+      `<div>Integridad de memoria</div><div>${d.hvciEnabled ? "Activada (bloquea el driver de temperatura)" : "Desactivada"}</div>` +
+      `<div>Temps. CPU con valor</div><div>${d.cpuTempWithValue} de ${d.cpuTempSensors}</div>` +
+      `<div>Sensores con valor</div><div>${d.sensorsWithValue} de ${d.totalSensors}</div>`;
+    if (da) {
+      if (d.cpuTempWithValue > 0) da.textContent = "El equipo publica temperaturas de CPU: las verás en la sección CPU.";
+      else if (d.hvciEnabled) da.textContent = "Sin valores de temperatura porque la integridad de memoria bloquea el driver. Opciones: activar «Shared Memory Support» en HWiNFO64 (recomendado) o desactivar la integridad y reiniciar.";
+      else if (!d.isAdmin) da.textContent = "Prueba «Reiniciar como administrador» en Configuración → Permisos.";
+      else da.textContent = "El firmware no entrega temperaturas al sistema. Se muestran el resto de sensores reales.";
+    }
+  }
   drawMini(); drawHist();
 }
 
@@ -506,7 +521,7 @@ $("btn-save-bat").addEventListener("click", () => {
   let re = parseFloat($("cfg-bat-re").value) || 75;
   th = Math.min(100, Math.max(50, th));
   re = Math.min(99, Math.max(10, re));
-  if (re >= th) { alert("La reactivación debe ser inferior al umbral de alerta."); return; }
+  if (re >= th) { alert("El segundo valor debe ser menor que el primero."); return; }
   post({ cmd: "setBatteryAlert", enabled: $("cfg-bat-on").checked, threshold: th, rearm: re, sound: $("cfg-bat-sound").checked, mode: $("cfg-bat-mode").value });
 });
 $("btn-test-bat").addEventListener("click", () => post({ cmd: "testBatteryAlert" }));
