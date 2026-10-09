@@ -183,14 +183,12 @@
         <h3>¿Por qué no sale la temperatura de CPU?</h3>
         <div class="muted">La temperatura del procesador solo la entrega Windows a programas
         <b>elevados</b>: ve a <b>Configuración → Permisos → Reiniciar como administrador</b> y acepta el aviso.</div>
-        <div class="muted" style="margin-top:8px">Si ni como administrador aparece, la causa es la
+        <div class="muted" style="margin-top:8px">Si ni como administrador aparece, la causa suele ser la
         <b>integridad de memoria</b> (Seguridad de Windows → Seguridad del dispositivo →
-        Aislamiento del núcleo): bloquea el controlador de bajo nivel. Puedes mantenerla
-        activada (recomendado, es seguridad real) o desactivarla y reiniciar para ver temperaturas.</div>
-        <div class="muted" style="margin-top:8px"><b>Truco sin desactivar protecciones:</b> instala
-        <b>HWiNFO64</b> (gratuito) y activa su opción «Shared Memory Support». TempPanel detecta
-        sus lecturas automáticamente y las muestra indicando la fuente «HWiNFO64».
-        <span id="hwinfo-status" class="accent"></span></div>
+        Aislamiento del núcleo): bloquea el controlador de bajo nivel. La sección
+        «Estado de la detección» de abajo te dice si Windows lo bloqueó en este equipo.
+        Puedes mantener la protección activada (recomendado, es seguridad real) o
+        desactivarla y reiniciar para ver temperaturas.</div>
       </div>
       <div class="card">
         <h3>Estado de la detección en este equipo</h3>
@@ -202,7 +200,6 @@
         <div class="kv">
           <div>Valor con número</div><div>Lectura real del equipo en ese momento.</div>
           <div><i>No disponible</i></div><div>Tu equipo no publica ese sensor. No es un error ni un cero.</div>
-          <div>Fuente «HWiNFO64»</div><div>Lectura aportada por HWiNFO64 en ejecución.</div>
           <div>Alerta térmica</div><div>Aviso visual con histéresis (3 °C) y pausa de 10 min. No modifica nada del equipo.</div>
           <div>Alerta de batería</div><div>Solo avisa al llegar al umbral cargando. Notificar no detiene la carga física.</div>
         </div>

@@ -59,17 +59,10 @@ public sealed class MemoryData
     public string? Source { get; set; }
 }
 
-public sealed class HwinfoStatus
-{
-    public bool Available { get; set; }
-    public int Sensors { get; set; }
-    public int Readings { get; set; }
-    public string? Note { get; set; }
-}
-
 /// <summary>
 /// Estado del acceso a sensores para la página de Ayuda: cuántos sensores de
-/// temperatura de CPU publica el equipo y cuántos traen valor, modo admin y HVCI.
+/// temperatura de CPU publica el equipo y cuántos traen valor, modo admin,
+/// HVCI y si Windows bloqueó el driver de bajo nivel.
 /// </summary>
 public sealed class DetectionDiagnostics
 {
@@ -79,6 +72,9 @@ public sealed class DetectionDiagnostics
     public int CpuTempWithValue { get; set; }
     public int TotalSensors { get; set; }
     public int SensorsWithValue { get; set; }
+    // true = Windows bloqueó el driver (verificado en el registro de eventos);
+    // false = sin bloqueos; null = no se pudo comprobar (p. ej. sin admin).
+    public bool? DriverBlocked { get; set; }
 }
 
 public sealed class BatteryData
@@ -154,7 +150,6 @@ public sealed class Snapshot
     public List<FanData> Fans { get; set; } = new();
     public List<StorageData> Storage { get; set; } = new();
     public SessionStats Session { get; set; } = new();
-    public HwinfoStatus Hwinfo { get; set; } = new();
     public DetectionDiagnostics Diagnostics { get; set; } = new();
     public List<double?> ExtraTemps { get; set; } = new();
     public List<string> ExtraTempNames { get; set; } = new();

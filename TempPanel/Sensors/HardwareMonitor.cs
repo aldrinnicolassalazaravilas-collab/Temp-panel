@@ -101,7 +101,6 @@ public sealed class HardwareMonitor : IDisposable
             }
             catch (Exception ex) { AppLogger.Error("ReadExtraTemps: " + ex); }
             try { snap.AllSensors = ReadAllSensors(); } catch (Exception ex) { AppLogger.Error("ReadAllSensors: " + ex); }
-            try { MergeHwinfo(snap); } catch (Exception ex) { AppLogger.Error("MergeHwinfo: " + ex); }
             try { snap.Diagnostics = BuildDiagnostics(snap); } catch (Exception ex) { AppLogger.Error("Diagnostics: " + ex); }
 
             var now = DateTime.Now;
@@ -533,132 +532,6 @@ public sealed class HardwareMonitor : IDisposable
         return (names, vals);
     }
 
-    // ---------- Fusión opcional con HWiNFO64 ----------
-    // Solo rellena lo que LibreHardwareMonitor no pudo leer (nunca sobrescribe
-    // una lectura real). Cada valor conserva su fuente en los campos *Source.
-    private void MergeHwinfo(Snapshot snap)
-    {
-        if (!HwinfoMonitor.TryRead(out var rs, out int nSensors, out string? note))
-        {
-            snap.Hwinfo = new HwinfoStatus { Available = false, Note = note };
-            return;
-        }
-        snap.Hwinfo = new HwinfoStatus
-        {
-            Available = true,
-            Sensors = nSensors,
-            Readings = rs.Count,
-            Note = note
-        };
-
-        // --- CPU: paquete ---
-        if (!snap.Cpu.PackageTemp.HasValue)
-        {
-            var pkg = PickTemp(rs, IsCpuSensor, s =>
-                s.Contains("Package", StringComparison.OrdinalIgnoreCase));
-            pkg ??= PickTemp(rs, IsCpuSensor, s =>
-                s.Contains("Average", StringComparison.OrdinalIgnoreCase));
-            if (pkg != null)
-            {
-                snap.Cpu.PackageTemp = Math.Round(pkg.Value, 1);
-                snap.Cpu.PackageTempSource = pkg.Label + " (HWiNFO64)";
-            }
-            else
-            {
-                var cores = CpuCoreTemps(rs);
-                if (cores.Count > 0)
-                {
-                    snap.Cpu.PackageTemp = Math.Round(cores.Max(c => c.v), 1);
-                    snap.Cpu.PackageTempSource = "Máx. de núcleos (HWiNFO64)";
-                }
-            }
-        }
-        // --- CPU: núcleos ---
-        if (snap.Cpu.CoreTemps.Count == 0)
-        {
-            var cores = CpuCoreTemps(rs);
-            foreach (var (name, v) in cores)
-            {
-                snap.Cpu.CoreTempNames.Add(name);
-                snap.Cpu.CoreTemps.Add(Math.Round(v, 1));
-            }
-        }
-        // --- GPU: temperatura ---
-        if (!snap.Gpu.Temp.HasValue)
-        {
-            var gt = PickTemp(rs, IsGpuSensor, s =>
-                s.Contains("Temperature", StringComparison.OrdinalIgnoreCase));
-            if (gt != null && !string.IsNullOrEmpty(snap.Gpu.Name))
-            {
-                snap.Gpu.Temp = Math.Round(gt.Value, 1);
-                snap.Gpu.TempSource = gt.Label + " (HWiNFO64)";
-                snap.Gpu.Note = null;
-            }
-        }
-        // --- Ventiladores que LHM no vio ---
-        var knownFans = new HashSet<string>(snap.Fans.Select(f => f.Name),
-            StringComparer.OrdinalIgnoreCase);
-        foreach (var r in rs)
-        {
-            if (!IsRpm(r)) continue;
-            if (r.Value < 0 || r.Value > 20000) continue;
-            if (!knownFans.Add(r.Label)) continue;
-            snap.Fans.Add(new FanData
-            {
-                Name = r.Label,
-                Hardware = string.IsNullOrWhiteSpace(r.SensorName) ? "HWiNFO64" : r.SensorName,
-                Rpm = Math.Round(r.Value, 0),
-                Available = true
-            });
-        }
-    }
-
-    private static bool IsCpuSensor(HwinfoReading r) =>
-        r.SensorType == HwinfoParser.SensorCpu ||
-        r.SensorName.Contains("CPU", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsGpuSensor(HwinfoReading r) =>
-        r.SensorType == HwinfoParser.SensorGpu ||
-        r.SensorName.Contains("GPU", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsTemp(HwinfoReading r) =>
-        r.Unit == "°C" || r.Unit == "C" ||
-        r.ReadingType == HwinfoParser.ReadingTemp;
-
-    private static bool IsRpm(HwinfoReading r) =>
-        r.Unit.Equals("RPM", StringComparison.OrdinalIgnoreCase) ||
-        r.ReadingType == HwinfoParser.ReadingFan;
-
-    private static HwinfoReading? PickTemp(List<HwinfoReading> rs,
-        Func<HwinfoReading, bool> sensor, Func<string, bool> label)
-    {
-        foreach (var r in rs)
-        {
-            if (!sensor(r) || !IsTemp(r)) continue;
-            if (!label(r.Label)) continue;
-            if (r.Value < -40 || r.Value > 130) continue; // fuera de rango físico
-            return r;
-        }
-        return null;
-    }
-
-    private static List<(string name, double v)> CpuCoreTemps(List<HwinfoReading> rs)
-    {
-        var list = new List<(int n, string name, double v)>();
-        foreach (var r in rs)
-        {
-            if (!IsCpuSensor(r) || !IsTemp(r)) continue;
-            var m = System.Text.RegularExpressions.Regex.Match(
-                r.Label, @"Core\s*#?\s*(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            if (!m.Success) continue;
-            if (!int.TryParse(m.Groups[1].Value, out int n)) continue;
-            if (r.Value < -40 || r.Value > 130) continue;
-            if (list.Any(x => x.n == n)) continue;
-            list.Add((n, r.Label.Trim(), r.Value));
-        }
-        return list.OrderBy(x => x.n).Select(x => (x.name, x.v)).ToList();
-    }
-
     // ---------- Diagnóstico de detección ----------
     private DetectionDiagnostics BuildDiagnostics(Snapshot snap)
     {
@@ -678,7 +551,8 @@ public sealed class HardwareMonitor : IDisposable
             CpuTempSensors = cpuTotal,
             CpuTempWithValue = cpuWith,
             TotalSensors = snap.AllSensors.Count,
-            SensorsWithValue = snap.AllSensors.Count(s => s.Value.HasValue)
+            SensorsWithValue = snap.AllSensors.Count(s => s.Value.HasValue),
+            DriverBlocked = CheckDriverBlocked()
         };
     }
 
@@ -694,6 +568,59 @@ public sealed class HardwareMonitor : IDisposable
         }
         catch { }
         return false;
+    }
+
+    /// <summary>
+    /// Busca en el registro de integridad de código si Windows bloqueó el
+    /// driver de lectura de sensores (WinRing0). Solo legible como admin:
+    /// sin permisos devuelve null (desconocido), nunca un falso negativo
+    /// presentado como certeza. Se cachea 10 minutos (recorrer el registro
+    /// en cada lectura sería un gasto inútil).
+    /// </summary>
+    private bool? _driverBlockedCache;
+    private DateTime _driverBlockedAt;
+
+    private bool? CheckDriverBlocked()
+    {
+        if (!IsRunningAsAdmin()) return null;
+        if (_driverBlockedCache.HasValue && DateTime.Now - _driverBlockedAt < TimeSpan.FromMinutes(10))
+            return _driverBlockedCache;
+        bool? result = QueryDriverBlocked();
+        _driverBlockedCache = result;
+        _driverBlockedAt = DateTime.Now;
+        return result;
+    }
+
+    private static bool? QueryDriverBlocked()
+    {
+        if (!IsRunningAsAdmin()) return null;
+        try
+        {
+            var log = new System.Diagnostics.EventLog("System");
+            int checkedEvents = 0;
+            // Recorre de lo más reciente hacia atrás, acotado para no tardar.
+            for (int i = log.Entries.Count - 1; i >= 0 && checkedEvents < 4000; i--)
+            {
+                System.Diagnostics.EventLogEntry entry;
+                try { entry = log.Entries[i]; }
+                catch { continue; }
+                checkedEvents++;
+                if (entry.TimeGenerated < DateTime.Now.AddDays(-14)) break;
+                string src = entry.Source ?? "";
+                if (!src.Contains("CodeIntegrity", StringComparison.OrdinalIgnoreCase) &&
+                    !src.Contains("Kernel-PnP", StringComparison.OrdinalIgnoreCase)) continue;
+                string msg = entry.Message ?? "";
+                if (msg.Contains("WinRing0", StringComparison.OrdinalIgnoreCase) &&
+                    (msg.Contains("bloque", StringComparison.OrdinalIgnoreCase) ||
+                     msg.Contains("block", StringComparison.OrdinalIgnoreCase) ||
+                     msg.Contains("vulnerab", StringComparison.OrdinalIgnoreCase) ||
+                     msg.Contains("HVCI", StringComparison.OrdinalIgnoreCase) ||
+                     msg.Contains("hypervisor", StringComparison.OrdinalIgnoreCase)))
+                    return true;
+            }
+            return false;
+        }
+        catch { return null; }
     }
 
     // ---------- Almacenamiento ----------

@@ -50,18 +50,20 @@ a activarla cuando quieras (repite los pasos al revés).
 
 ## Métodos alternativos buscados en este equipo (2026-10-09)
 
-Se interrogó directamente el portátil; ninguno ofrece la temperatura de CPU:
+Se interrogó directamente el portátil; ninguno ofrece la temperatura de CPU
+sin el driver de bajo nivel (y sin programas externos, por decisión del usuario):
 
 - `Win32_TemperatureProbe`: existe pero sin lectura (Unknown).
 - Contadores `Thermal Zone Information`: no existen.
 - `MSAcpi_ThermalZoneTemperature` y `BatteryTemperature`: clases sin instancias.
 - WMI de Lenovo (`LENOVO_GAMEZONE_*`, `LENOVO_CPU_METHOD`…): expone control
   (overclock, ventiladores, energía) y eventos, pero ningún lector de
-  temperatura de CPU en vivo; las capacidades no devuelven instancias.
-  Probar IDs indocumentados podría devolver valores malinterpretados, así que
-  no se usa: TempPanel nunca presenta conjeturas como lecturas reales.
+  temperatura de CPU en vivo.
+- La vía HWiNFO se descartó a petición del usuario: TempPanel no depende de
+  ningún programa externo.
 
-Queda únicamente la vía del driver de bajo nivel (Paso 1 + Opción B).
+Queda únicamente la vía del driver de bajo nivel (Paso 1 + Opción B). La página
+de Ayuda de la app muestra si Windows bloqueó ese driver en tu equipo.
 
 ### Lo que NO va a aparecer nunca en este modelo
 

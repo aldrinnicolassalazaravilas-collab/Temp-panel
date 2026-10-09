@@ -151,21 +151,22 @@ function renderAll(s) {
 
   renderSummary(s); renderCpu(s); renderGpu(s); renderRam(s);
   renderBat(s); renderCooling(s); renderSensors(s); renderSys(s);
-  const hw = $("hwinfo-status");
-  if (hw) hw.textContent = (s.hwinfo && s.hwinfo.available)
-    ? `Estado actual: ${s.hwinfo.note || "HWiNFO64 activo."}`
-    : `Estado actual: ${(s.hwinfo && s.hwinfo.note) || "HWiNFO64 no detectado."}`;
   const dg = $("diag-info"), da = $("diag-advice");
   if (dg && s.diagnostics) {
     const d = s.diagnostics;
+    const drv = d.driverBlocked === true ? "Sí, Windows lo bloqueó"
+      : d.driverBlocked === false ? "No se encontraron bloqueos"
+      : "No comprobable sin administrador";
     dg.innerHTML =
       `<div>Permisos</div><div>${d.isAdmin ? "Administrador" : "Usuario estándar"}</div>` +
       `<div>Integridad de memoria</div><div>${d.hvciEnabled ? "Activada (bloquea el driver de temperatura)" : "Desactivada"}</div>` +
+      `<div>Driver bloqueado</div><div>${drv}</div>` +
       `<div>Temps. CPU con valor</div><div>${d.cpuTempWithValue} de ${d.cpuTempSensors}</div>` +
       `<div>Sensores con valor</div><div>${d.sensorsWithValue} de ${d.totalSensors}</div>`;
     if (da) {
       if (d.cpuTempWithValue > 0) da.textContent = "El equipo publica temperaturas de CPU: las verás en la sección CPU.";
-      else if (d.hvciEnabled) da.textContent = "Sin valores de temperatura porque la integridad de memoria bloquea el driver. Opciones: activar «Shared Memory Support» en HWiNFO64 (recomendado) o desactivar la integridad y reiniciar.";
+      else if (d.driverBlocked === true) da.textContent = "Confirmado: Windows bloqueó el controlador de lectura. Para ver temperaturas, desactiva la integridad de memoria y reinicia (o mantenla y usa el resto de sensores).";
+      else if (d.hvciEnabled) da.textContent = "Sin valores de temperatura y con integridad activada: es el bloqueo probable. Desactívala y reinicia para comprobarlo.";
       else if (!d.isAdmin) da.textContent = "Prueba «Reiniciar como administrador» en Configuración → Permisos.";
       else da.textContent = "El firmware no entrega temperaturas al sistema. Se muestran el resto de sensores reales.";
     }
