@@ -1,0 +1,2 @@
+TempPanel 1.0.0 — Monitor de hardware en tiempo real para Windows.
+Copyright © 2026 TempPanel. Uso personal.

@@ -1,0 +1,12 @@
+# Build outputs
+bin/
+obj/
+publish/
+dist/
+*.user
+.vs/
+# TempPanel locales (config/logs del usuario, no van al repo)
+*.log
+# Sistema
+Thumbs.db
+Desktop.ini
