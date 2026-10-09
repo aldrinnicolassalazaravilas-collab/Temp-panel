@@ -1,0 +1,17 @@
+const fs = require('fs');
+const s = JSON.parse(fs.readFileSync('C:/Users/LENOVO/AppData/Local/Temp/temppanel-selftest.json', 'utf8'));
+const cpu = s.AllSensors.filter(x => x.HardwareType === 'Cpu');
+console.log('--- CPU: tipos de sensor ---');
+const byType = {};
+cpu.forEach(x => { byType[x.Type] = (byType[x.Type] || 0) + 1; });
+console.log(JSON.stringify(byType));
+console.log('--- CPU Temperature (todas) ---');
+cpu.filter(x => x.Type === 'Temperature').forEach(x => console.log(`  ${x.Name} = ${x.Value} (min ${x.Min} max ${x.Max}) [${x.Identifier}]`));
+console.log('--- CPU Power (todas) ---');
+cpu.filter(x => x.Type === 'Power').forEach(x => console.log(`  ${x.Name} = ${x.Value} [${x.Identifier}]`));
+console.log('--- CPU Clock (primeras 5) ---');
+cpu.filter(x => x.Type === 'Clock').slice(0, 5).forEach(x => console.log(`  ${x.Name} = ${x.Value} [${x.Identifier}]`));
+console.log('--- CPU Load (todas) ---');
+cpu.filter(x => x.Type === 'Load').forEach(x => console.log(`  ${x.Name} = ${x.Value}`));
+console.log('--- Battery (todas) ---');
+s.AllSensors.filter(x => x.HardwareType === 'Battery').forEach(x => console.log(`  ${x.Type}/${x.Name} = ${x.Value} ${x.Unit}`));
