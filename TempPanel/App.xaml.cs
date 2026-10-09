@@ -13,6 +13,10 @@ namespace TempPanel;
 /// </summary>
 public partial class App : System.Windows.Application
 {
+    // Mutex para que el instalador detecte la app en ejecución (cualquier
+    // nivel de integridad) y pida cerrarla antes de reemplazar archivos.
+    private System.Threading.Mutex? _appMutex;
+
     protected override void OnStartup(StartupEventArgs e)
     {
         AppDomain.CurrentDomain.UnhandledException += (_, ex) =>
@@ -23,6 +27,9 @@ public partial class App : System.Windows.Application
             ex.Handled = true;
         };
         AppLogger.Info("TempPanel iniciado v1.1.0");
+
+        try { _appMutex = new System.Threading.Mutex(true, "TempPanelAppMutex"); }
+        catch (Exception ex) { AppLogger.Error("Mutex: " + ex.Message); }
 
         var args = e.Args ?? Array.Empty<string>();
         if (args.Any(a => a.Equals("--selftest", StringComparison.OrdinalIgnoreCase)))

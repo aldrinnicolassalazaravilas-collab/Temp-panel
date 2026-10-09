@@ -11,6 +11,7 @@
 AppId={{8A3F2B1C-7D4E-4A5F-9C6B-1E2F3A4B5C6D}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+AppMutex=TempPanelAppMutex
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
