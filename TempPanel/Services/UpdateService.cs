@@ -18,6 +18,12 @@ public sealed class UpdateInfo
     public string Notes { get; set; } = "";
 }
 
+public sealed class CheckResult
+{
+    public UpdateInfo? Info { get; set; }
+    public bool NoReleases { get; set; }
+}
+
 public static class UpdateService
 {
     public const string RepoOwner = "aldrinnicolassalazaravilas-collab";
@@ -45,17 +51,19 @@ public static class UpdateService
     }
 
     /// <returns>info si hay versión nueva; null si está al día o sin red.</returns>
-    public static async Task<UpdateInfo?> CheckAsync()
+    public static async Task<CheckResult> CheckAsync()
     {
         try
         {
             using var res = await Http.GetAsync(ApiUrl);
-            if (!res.IsSuccessStatusCode) return null;
+            if (res.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return new CheckResult { NoReleases = true };
+            if (!res.IsSuccessStatusCode) return new CheckResult();
             using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync());
             var root = doc.RootElement;
             string tag = root.TryGetProperty("tag_name", out var t) ? t.GetString() ?? "" : "";
             var ver = ParseTag(tag);
-            if (ver == null || !IsNewer(Current(), ver)) return null;
+            if (ver == null || !IsNewer(Current(), ver)) return new CheckResult();
             string url = "";
             if (root.TryGetProperty("assets", out var assets))
             {
@@ -67,13 +75,13 @@ public static class UpdateService
                     { url = u.GetString() ?? ""; break; }
                 }
             }
-            if (string.IsNullOrEmpty(url)) return null;
+            if (string.IsNullOrEmpty(url)) return new CheckResult();
             string notes = root.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "";
-            return new UpdateInfo { Tag = tag, Version = ver, SetupUrl = url, Notes = notes };
+            return new CheckResult { Info = new UpdateInfo { Tag = tag, Version = ver, SetupUrl = url, Notes = notes } };
         }
         catch
         {
-            return null; // sin red o error: silencio, la app sigue local
+            return new CheckResult(); // sin red o error: silencio, la app sigue local
         }
     }
 

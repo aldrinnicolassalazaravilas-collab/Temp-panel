@@ -360,14 +360,14 @@ public partial class MainWindow : Window
         try
         {
             SendUpdateStatus("checking", null);
-            var info = await UpdateService.CheckAsync();
-            if (info == null)
+            var result = await UpdateService.CheckAsync();
+            if (result.Info == null)
             {
-                // Sin novedad o sin red: solo se informa si fue manual.
-                if (manual) SendUpdateStatus("uptodate", null);
+                // Sin novedad, sin releases o sin red: solo se informa si fue manual.
+                if (manual) SendUpdateStatus(result.NoReleases ? "noreleases" : "uptodate", null);
                 return;
             }
-            SendUpdateStatus("available", info);
+            SendUpdateStatus("available", result.Info);
         }
         catch (Exception ex)
         {

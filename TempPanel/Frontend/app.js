@@ -66,6 +66,7 @@ function onUpdate(d) {
   pendingUpdate = null; dl.style.display = "none";
   if (d.state === "checking") st.textContent = "Comprobando…";
   else if (d.state === "uptodate") st.textContent = `Estás al día (v${d.current}).`;
+  else if (d.state === "noreleases") st.textContent = "Aún no hay versiones publicadas en GitHub.";
   else if (d.state === "available") {
     pendingUpdate = d;
     st.textContent = `Nueva versión ${d.latest} disponible (tienes v${d.current}).`;
