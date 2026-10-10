@@ -403,7 +403,7 @@ public partial class MainWindow : Window
             if (string.IsNullOrWhiteSpace(url)) return;
             SendUpdateStatus("downloading", null);
             string? path = await UpdateService.DownloadAndLaunchAsync(url, tag);
-            if (path == null) SendUpdateStatus("error", null);
+            if (path == null) SendUpdateStatus("dlerror", null);
             else ExitApp(); // el instalador ya está en marcha
         }
         catch (Exception ex)

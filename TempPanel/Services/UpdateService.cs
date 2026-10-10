@@ -88,18 +88,42 @@ public static class UpdateService
     /// <summary>Descarga el instalador a %TEMP% y lo lanza. El llamador cierra la app.</summary>
     public static async Task<string?> DownloadAndLaunchAsync(string url, string tag)
     {
+        string? dest = null;
         try
         {
+            if (string.IsNullOrWhiteSpace(url)) return null;
             string safe = new(string.Concat(tag.Where(c => char.IsLetterOrDigit(c) || c is '.' or '-')));
-            string dest = Path.Combine(Path.GetTempPath(), $"TempPanel-Setup-{safe}.exe");
+            // Nombre único por descarga: evita chocar con el escaneo del antivirus
+            // de una descarga anterior del mismo archivo.
+            dest = Path.Combine(Path.GetTempPath(),
+                $"TempPanel-Setup-{safe}-{DateTime.Now:yyyyMMdd-HHmmss}.exe");
             using var res = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
             if (!res.IsSuccessStatusCode) return null;
             await using var net = await res.Content.ReadAsStreamAsync();
             await using var file = File.Create(dest);
             await net.CopyToAsync(file);
-            if (new FileInfo(dest).Length < 1024 * 1024) return null; // descarga corrupta
-            Process.Start(new ProcessStartInfo(dest) { UseShellExecute = true });
-            return dest;
+            if (new FileInfo(dest).Length < 1024 * 1024)
+            {
+                Sensors.AppLogger.Error("Update download: archivo demasiado pequeño, posible descarga corrupta.");
+                return null;
+            }
+            // El antivirus suele escanear el exe nuevo unos segundos y lo bloquea;
+            // reintenta el lanzamiento con pausas en lugar de fallar a la primera.
+            for (int i = 0; i < 6; i++)
+            {
+                try
+                {
+                    Process.Start(new ProcessStartInfo(dest) { UseShellExecute = true });
+                    return dest;
+                }
+                catch (Exception ex) when (i < 5)
+                {
+                    Sensors.AppLogger.Info($"Update launch reintento {i + 1}: " + ex.Message);
+                    await Task.Delay(2000);
+                }
+            }
+            Sensors.AppLogger.Error("Update download: no se pudo abrir el instalador tras 6 intentos: " + dest);
+            return null;
         }
         catch (Exception ex)
         {

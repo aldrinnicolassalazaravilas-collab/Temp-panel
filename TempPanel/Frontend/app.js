@@ -72,6 +72,7 @@ function onUpdate(d) {
     dl.style.display = "";
   }
   else if (d.state === "downloading") st.textContent = "Descargando instalador… se abrirá solo; la app se cerrará.";
+  else if (d.state === "dlerror") st.textContent = "Se descargó pero no se pudo abrir el instalador (quizá el antivirus lo está revisando). Busca TempPanel-Setup-*.exe en tu carpeta temporal y ábrelo a mano pasados unos segundos.";
   else if (d.state === "error") st.textContent = "No se pudo comprobar (¿sin Internet o sin releases?).";
 }
 function setConn(cls, text) {

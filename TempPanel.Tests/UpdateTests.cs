@@ -46,6 +46,14 @@ public sealed class UpdateServiceTests
     }
 
     [Fact]
+    public async Task DownloadAndLaunch_BadUrl_Returns_Null_Fast()
+    {
+        // Sin red externa: localhost cerrado falla al instante.
+        var r = await UpdateService.DownloadAndLaunchAsync("http://127.0.0.1:9/nope.exe", "v9.9.9-test");
+        Assert.Null(r);
+    }
+
+    [Fact]
     public void NotifyBattery_Uses_Configured_Threshold()
     {
         string gotTitle = "", gotMsg = "";
