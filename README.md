@@ -47,7 +47,8 @@ carga física: ningún método seguro existe para este modelo, así que solo avi
 ## Bandeja del sistema
 
 Cerrar la ventana minimiza a la bandeja (sigue monitorizando). Doble clic o
-«Abrir» restaura; «Salir» cierra del todo.
+«Abrir» restaura; «Salir» cierra del todo. Solo puede haber una instancia:
+abrir de nuevo restaura la existente.
 
 ## Desinstalar
 
