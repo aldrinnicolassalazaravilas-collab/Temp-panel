@@ -451,7 +451,7 @@ public partial class MainWindow : Window
         {
             string exe = Process.GetCurrentProcess().MainModule?.FileName
                 ?? AppDomain.CurrentDomain.BaseDirectory + "TempPanel.exe";
-            var psi = new ProcessStartInfo(exe) { UseShellExecute = true, Verb = "runas" };
+            var psi = new ProcessStartInfo(exe) { UseShellExecute = true, Verb = "runas", Arguments = "--takeover" };
             Process.Start(psi);
             ExitApp();
         }

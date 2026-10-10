@@ -47,14 +47,24 @@ public partial class App : System.Windows.Application
                                  a.Equals("--test-battery-alert", StringComparison.OrdinalIgnoreCase));
         if (!cli)
         {
-            // Instancia única: si ya hay una, restaura su ventana y sale.
+            // Instancia única: si ya hay una, restaura su ventana y sale,
+            // salvo relevo de reinicio elevado (--takeover), que espera a que
+            // la instancia anterior termine y toma el relevo como principal.
             bool createdNew;
             _instanceMutex = new System.Threading.Mutex(true, "TempPanelSingleInstance", out createdNew);
             if (!createdNew)
             {
-                RestoreExisting();
-                Shutdown();
-                return;
+                bool takeover = args.Any(a => a.Equals("--takeover", StringComparison.OrdinalIgnoreCase));
+                if (takeover && AcquireAfterWait())
+                {
+                    // La anterior terminó: seguimos como instancia principal.
+                }
+                else
+                {
+                    RestoreExisting();
+                    Shutdown();
+                    return;
+                }
             }
         }
         if (args.Any(a => a.Equals("--selftest", StringComparison.OrdinalIgnoreCase)))
@@ -73,6 +83,23 @@ public partial class App : System.Windows.Application
         }
 
         base.OnStartup(e);
+    }
+
+    private bool AcquireAfterWait()
+    {
+        try
+        {
+            if (_instanceMutex == null) return false;
+            return _instanceMutex.WaitOne(TimeSpan.FromSeconds(25));
+        }
+        catch (AbandonedMutexException)
+        {
+            return true; // la anterior murió sin liberar: el relevo es nuestro
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static void RestoreExisting()
