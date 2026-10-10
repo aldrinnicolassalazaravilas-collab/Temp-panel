@@ -124,6 +124,8 @@ public sealed class SessionStats
     public double? CpuTempAvg { get; set; }
     public double? CpuLoadMax { get; set; }
     public double? CpuLoadAvg { get; set; }
+    public double? GpuTempMin { get; set; }
+    public double? GpuTempMax { get; set; }
     public int Samples { get; set; }
 }
 

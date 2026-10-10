@@ -25,6 +25,8 @@ public sealed class HardwareMonitor : IDisposable
     private int _sessionSamples;
     private int _cpuTempSamples;
     private int _cpuLoadSamples;
+    private double? _gpuTempMin;
+    private double? _gpuTempMax;
     private double? _cpuTempMin;
     private double? _cpuTempMax;
     private double? _cpuLoadMax;
@@ -663,6 +665,12 @@ public sealed class HardwareMonitor : IDisposable
             _cpuLoadSum += l;
             _cpuLoadSamples++;
         }
+        if (snap.Gpu.Temp.HasValue)
+        {
+            double g = snap.Gpu.Temp.Value;
+            _gpuTempMin = _gpuTempMin.HasValue ? Math.Min(_gpuTempMin.Value, g) : g;
+            _gpuTempMax = _gpuTempMax.HasValue ? Math.Max(_gpuTempMax.Value, g) : g;
+        }
         _sessionSamples++;
         snap.Session = new SessionStats
         {
@@ -673,6 +681,8 @@ public sealed class HardwareMonitor : IDisposable
             CpuLoadMax = _cpuLoadMax.HasValue ? Math.Round(_cpuLoadMax.Value, 1) : null,
             CpuLoadAvg = _cpuLoadSamples > 0
                 ? Math.Round(_cpuLoadSum / _cpuLoadSamples, 1) : null,
+            GpuTempMin = _gpuTempMin.HasValue ? Math.Round(_gpuTempMin.Value, 1) : null,
+            GpuTempMax = _gpuTempMax.HasValue ? Math.Round(_gpuTempMax.Value, 1) : null,
             Samples = _sessionSamples
         };
     }

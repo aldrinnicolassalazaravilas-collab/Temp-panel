@@ -24,7 +24,6 @@ public partial class MainWindow : Window
     private readonly System.Windows.Forms.NotifyIcon _tray;
     private readonly JsonSerializerOptions _jsonOpts = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     private bool _webReady;
-    private bool _paused;
     private bool _allowClose;
 
     public MainWindow()
@@ -169,12 +168,8 @@ public partial class MainWindow : Window
                     }
                     break;
                 case "setPaused":
-                    if (doc.RootElement.TryGetProperty("paused", out var pEl))
-                    {
-                        _paused = pEl.GetBoolean();
-                        if (_paused) _sensorTimer.Change(Timeout.Infinite, Timeout.Infinite);
-                        else _sensorTimer.Change(0, _config.RefreshMs);
-                    }
+                    // La lectura continúa en el backend; la pausa solo congela
+                    // gráficas e historial en el frontend (no se envía nada).
                     break;
                 case "setUnit":
                     if (doc.RootElement.TryGetProperty("unit", out var uEl))
@@ -259,7 +254,7 @@ public partial class MainWindow : Window
     // ---------------- Sensores ----------------
     private void PushSnapshot()
     {
-        if (!_webReady || _paused) return;
+        if (!_webReady) return;
         try
         {
             var snap = _monitor.GetSnapshot();

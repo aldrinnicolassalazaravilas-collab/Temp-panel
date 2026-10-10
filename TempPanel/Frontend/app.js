@@ -44,7 +44,6 @@ document.querySelectorAll(".nav-btn").forEach(b => b.addEventListener("click", (
 $("btn-pause").addEventListener("click", () => {
   paused = !paused;
   $("btn-pause").textContent = paused ? "▶ Reanudar" : "⏸ Pausar";
-  post({ cmd: "setPaused", paused });
 });
 $("btn-snapshot").addEventListener("click", () => post({ cmd: "getSnapshot" }));
 
@@ -87,6 +86,7 @@ function onSnapshot(s) {
   lastSnap = s;
   setConn("ok", "Conectado · cada " + (s.meta.refreshMs / 1000) + " s");
   $("last-read").textContent = "Última lectura: " + (s.meta.lastReadLocal || s.timestampLocal || "—");
+  if (paused) return; // pausa: congela gráficas e historial, la lectura sigue
   pushHist(s);
   renderAll(s);
 }
@@ -249,6 +249,10 @@ function renderGpu(s) {
     card("Carga", g.load != null ? `${g.load.toFixed(1)} <span class="unit">%</span>` : nd, "Núcleo GPU") +
     card("Frecuencia", g.clock != null ? `${Math.round(g.clock)} <span class="unit">MHz</span>` : nd, g.memoryUsedMb != null ? `Memoria: ${Math.round(g.memoryUsedMb)} MB` : "");
   $("gpu-note").innerHTML = `<div>Estado</div><div>${txt(g.note || (g.available ? "Sensores GPU disponibles arriba." : "Sin GPU detectable."))}</div>`;
+  const gs = s.session || {};
+  $("gpu-session").innerHTML =
+    `<div>Temp. mínima (sesión)</div><div>${degT(gs.gpuTempMin)}</div>` +
+    `<div>Temp. máxima (sesión)</div><div>${degT(gs.gpuTempMax)}</div>`;
 }
 
 function renderRam(s) {
