@@ -2,10 +2,13 @@
 ; Requiere: publish self-contained en ..\publish\win-x64
 
 #define MyAppName "TempPanel"
-#define MyAppVersion "1.1.0"
+#define MyAppVersion "1.1.1"
 #define MyAppPublisher "TempPanel"
 #define MyAppURL "https://github.com/temppanel/temppanel"
 #define MyAppExeName "TempPanel.exe"
+#ifndef PublishDir
+#define PublishDir "C:\tempanel\publish\win-x64"
+#endif
 
 [Setup]
 AppId={{8A3F2B1C-7D4E-4A5F-9C6B-1E2F3A4B5C6D}
@@ -40,7 +43,7 @@ Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "C:\tempanel\publish\win-x64\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTA: no se borran archivos personales; solo los propios (ver [UninstallDelete])
 
 [Icons]
