@@ -8,8 +8,8 @@ Distingue pruebas automatizadas, compilación y pruebas reales en el dispositivo
 - `dotnet build -c Release` → 0 errores (avisos menores MSB3277/NU1603 resueltos; build final: 0 avisos).
 - `dotnet publish -r win-x64 --self-contained` → `TempPanel.exe` 167 MB, sin necesidad de .NET.
 
-## 2. Pruebas automatizadas (§12.7) — 15/15 OK
-`dotnet test -c Release` → Superado: 15, Fallidos: 0.
+## 2. Pruebas automatizadas (§12.7) — 25/25 OK
+`dotnet test -c Release` → Superado: 25, Fallidos: 0.
 - Dispara cargando al 80 %; NO dispara descargando al 85–100 %; una sola vez por
   ciclo; se reactiva bajo 75 % (estricto: a 75.0 exacto NO rearma); desactivada
   nunca dispara; nivel nulo/inválido nunca dispara; umbrales personalizados;

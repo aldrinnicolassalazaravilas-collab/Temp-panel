@@ -459,8 +459,8 @@ $("btn-clear-hist").addEventListener("click", () => { history = []; drawMini(); 
 
 // ---------- CSV / registro ----------
 function toCsv() {
-  const rows = [["timestamp", "cpu_temp_c", "cpu_load_pct", "ram_used_mb", "gpu_temp_c"]];
-  history.forEach(p => rows.push([p.t.toISOString(), p.cpuTemp ?? "", p.cpuLoad ?? "", p.ramUsed ?? "", p.gpuTemp ?? ""]));
+  const rows = [["timestamp", "cpu_temp_c", "cpu_load_pct", "ram_used_mb", "gpu_temp_c", "bat_pct"]];
+  history.forEach(p => rows.push([p.t.toISOString(), p.cpuTemp ?? "", p.cpuLoad ?? "", p.ramUsed ?? "", p.gpuTemp ?? "", p.batPct ?? ""]));
   return rows.map(r => r.join(",")).join("\n");
 }
 function download(name, text, mime) {
@@ -523,6 +523,7 @@ $("cfg-startup").addEventListener("change", () => {
 $("btn-reset").addEventListener("click", () => {
   if (confirm("¿Restablecer todos los ajustes a sus valores predeterminados?")) post({ cmd: "resetSettings" });
 });
+$("btn-logs").addEventListener("click", () => post({ cmd: "openLogs" }));
 $("btn-save-bat").addEventListener("click", () => {
   let th = parseFloat($("cfg-bat-th").value) || 80;
   let re = parseFloat($("cfg-bat-re").value) || 75;

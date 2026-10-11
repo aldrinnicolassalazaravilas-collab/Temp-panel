@@ -48,7 +48,8 @@ carga física: ningún método seguro existe para este modelo, así que solo avi
 
 Cerrar la ventana minimiza a la bandeja (sigue monitorizando). Doble clic o
 «Abrir» restaura; «Salir» cierra del todo. Solo puede haber una instancia:
-abrir de nuevo restaura la existente.
+abrir de nuevo restaura la existente. El icono muestra el resumen vivo
+(CPU, carga y batería). En Ajustes hay botón para abrir la carpeta de registros.
 
 ## Desinstalar
 

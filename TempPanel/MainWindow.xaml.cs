@@ -207,6 +207,14 @@ public partial class MainWindow : Window
                     PushSnapshot();
                     break;
                 case "restartAdmin": RestartAsAdmin(); break;
+                case "openLogs":
+                    try
+                    {
+                        string dir = Sensors.AppLogger.LogDirectory;
+                        Process.Start(new ProcessStartInfo(dir) { UseShellExecute = true });
+                    }
+                    catch (Exception ex) { AppLogger.Error("openLogs: " + ex.Message); }
+                    break;
                 case "checkUpdates": _ = CheckUpdatesAsync(manual: true); break;
                 case "downloadUpdate":
                     if (doc.RootElement.TryGetProperty("url", out var urlEl) &&
@@ -263,6 +271,7 @@ public partial class MainWindow : Window
             {
                 try { Web.CoreWebView2?.PostWebMessageAsJson(json); }
                 catch (Exception ex) { AppLogger.Error("PostMessage: " + ex.Message); }
+                try { UpdateTray(snap); } catch { }
             });
         }
         catch (Exception ex) { AppLogger.Error("PushSnapshot: " + ex); }
@@ -300,6 +309,21 @@ public partial class MainWindow : Window
                 try { Web.CoreWebView2?.PostWebMessageAsJson(json); }
                 catch { }
             });
+        }
+        catch { }
+    }
+
+    /// <summary>Resumen vivo en la bandeja (máx. 63 caracteres).</summary>
+    private void UpdateTray(Sensors.Snapshot snap)
+    {
+        try
+        {
+            string cpu = snap.Cpu.PackageTemp.HasValue ? $"{snap.Cpu.PackageTemp.Value:0.0}°" : "—";
+            string load = snap.Cpu.TotalLoad.HasValue ? $"{snap.Cpu.TotalLoad.Value:0}%" : "—";
+            string bat = snap.Battery.Present && snap.Battery.Percent.HasValue ? $"{snap.Battery.Percent.Value:0}%" : "—";
+            string tip = $"TempPanel · CPU {cpu} · {load} · Bat {bat}";
+            if (tip.Length > 63) tip = tip.Substring(0, 63);
+            _tray.Text = tip;
         }
         catch { }
     }

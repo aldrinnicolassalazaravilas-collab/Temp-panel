@@ -12,6 +12,6 @@ const csv = toCsv(history);
 console.log(csv);
 const lines = csv.split('\n');
 console.log('---');
-console.log(lines[0] === 'timestamp,cpu_temp_c,cpu_load_pct,ram_used_mb,gpu_temp_c' ? 'OK: cabecera' : 'FALLO: cabecera');
+console.log(lines[0] === 'timestamp,cpu_temp_c,cpu_load_pct,ram_used_mb,gpu_temp_c,bat_pct' ? 'OK: cabecera' : 'FALLO: cabecera');
 console.log(lines.length === 3 ? 'OK: 2 filas + cabecera' : 'FALLO: filas=' + lines.length);
 console.log(lines[1].includes('55.2') && lines[2].startsWith('2026-10-09T17:00:02') ? 'OK: valores y nulos' : 'FALLO: valores');

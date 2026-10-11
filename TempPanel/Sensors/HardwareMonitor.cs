@@ -44,7 +44,9 @@ public sealed class HardwareMonitor : IDisposable
             IsMotherboardEnabled = true,
             IsControllerEnabled = true,
             IsNetworkEnabled = false,
-            IsStorageEnabled = true,
+            // Almacenamiento desactivado: en este equipo no publica ningún sensor
+            // y su listener generaba excepciones de fondo que solo ensuciaban el log.
+            IsStorageEnabled = false,
             IsBatteryEnabled = true,
             IsPsuEnabled = false
         };
