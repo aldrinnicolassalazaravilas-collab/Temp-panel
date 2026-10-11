@@ -20,6 +20,7 @@ public partial class MainWindow : Window
     private readonly System.Threading.Timer _sensorTimer;
     private readonly System.Threading.Timer _batteryTimer;
     private readonly BatteryAlertService _batteryService;
+    private readonly BatteryAlertService _fullService;
     private readonly Notifier _notifier;
     private readonly System.Windows.Forms.NotifyIcon _tray;
     private readonly JsonSerializerOptions _jsonOpts = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
@@ -38,7 +39,10 @@ public partial class MainWindow : Window
         };
         _batteryService = BatteryAlertService.FromConfig(_config);
         _batteryService.AlertTriggered += OnBatteryAlert;
-        _notifier = new Notifier(ShowBatteryPopup, ShowTrayBalloon);
+        _fullService = new BatteryAlertService();
+        _fullService.AlertTriggered += OnFullAlert;
+        _fullService.ApplyOptions(FullOptions());
+        _notifier = new Notifier(ShowBatteryPopup, ShowTrayBalloon, ShowFullPopup);
 
         // Bandeja del sistema
         _tray = new System.Windows.Forms.NotifyIcon
@@ -201,6 +205,7 @@ public partial class MainWindow : Window
                     _monitor.RefreshMs = _config.RefreshMs;
                     _monitor.PreferredCpuSensor = _config.PreferredCpuSensor;
                     _batteryService.ApplyOptions(BatteryAlertOptions.FromConfig(_config));
+                    _fullService.ApplyOptions(FullOptions());
                     StartupManager.Apply(false);
                     _sensorTimer.Change(0, _config.RefreshMs);
                     SendConfig();
@@ -240,6 +245,15 @@ public partial class MainWindow : Window
         return doc.RootElement.TryGetProperty(name, out var el) && el.TryGetDouble(out value);
     }
 
+    private BatteryAlertOptions FullOptions() => new()
+    {
+        Enabled = _config.BatteryFullEnabled,
+        ThresholdPct = 99,
+        RearmPct = 95,
+        Sound = _config.BatterySound,
+        Mode = _config.BatteryMode == "balloon" ? BatteryAlertMode.Balloon : BatteryAlertMode.Popup
+    };
+
     private void ApplyBatterySettings(JsonElement root)
     {
         if (root.TryGetProperty("enabled", out var en)) _config.BatteryAlertsEnabled = en.GetBoolean();
@@ -253,9 +267,11 @@ public partial class MainWindow : Window
             string m = (mo.GetString() ?? "popup").ToLowerInvariant();
             _config.BatteryMode = m == "balloon" ? "balloon" : "popup";
         }
+        if (root.TryGetProperty("full", out var fu)) _config.BatteryFullEnabled = fu.GetBoolean();
         _config.Normalize(); // garantiza reactivación < alerta
         _config.Save();
         _batteryService.ApplyOptions(BatteryAlertOptions.FromConfig(_config));
+        _fullService.ApplyOptions(FullOptions());
         SendConfig();
     }
 
@@ -300,6 +316,7 @@ public partial class MainWindow : Window
                     batteryRearm = _config.BatteryRearm,
                     batterySound = _config.BatterySound,
                     batteryMode = _config.BatteryMode,
+                    batteryFull = _config.BatteryFullEnabled,
                     autoCheckUpdates = _config.AutoCheckUpdates,
                     version = UpdateService.Current().ToString()
                 }
@@ -340,6 +357,7 @@ public partial class MainWindow : Window
             if (pct < 0 || pct > 100) return;
             bool charging = (ps.BatteryChargeStatus & System.Windows.Forms.BatteryChargeStatus.Charging) != 0;
             _batteryService.Evaluate(pct, charging);
+            _fullService.Evaluate(pct, charging);
         }
         catch (Exception ex) { AppLogger.Error("CheckBattery: " + ex.Message); }
     }
@@ -353,9 +371,31 @@ public partial class MainWindow : Window
         catch (Exception ex) { AppLogger.Error("OnBatteryAlert: " + ex.Message); }
     }
 
+    private void OnFullAlert(object? sender, double pct)
+    {
+        try
+        {
+            Dispatcher.BeginInvoke(() => _notifier.NotifyFull(_config, pct));
+        }
+        catch (Exception ex) { AppLogger.Error("OnFullAlert: " + ex.Message); }
+    }
+
     private void ShowBatteryPopup(string title, string message, bool playSound)
     {
-        var win = new BatteryAlertWindow(_config.BatteryThreshold, isTest: false);
+        // El modo popup siempre usa el mensaje del umbral configurado.
+        var win = new BatteryAlertWindow(
+            $"TempPanel — Batería al {_config.BatteryThreshold:0} %",
+            BatteryAlertWindow.ThresholdMessage(_config.BatteryThreshold));
+        win.Owner = IsVisible ? this : null;
+        if (playSound) { try { System.Media.SystemSounds.Exclamation.Play(); } catch { } }
+        win.ShowDialog();
+    }
+
+    private void ShowFullPopup(double pct, bool playSound)
+    {
+        var win = new BatteryAlertWindow(
+            "TempPanel — Batería cargada",
+            BatteryAlertWindow.FullMessage(pct));
         win.Owner = IsVisible ? this : null;
         if (playSound) { try { System.Media.SystemSounds.Exclamation.Play(); } catch { } }
         win.ShowDialog();

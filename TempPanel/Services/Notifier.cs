@@ -13,11 +13,14 @@ public sealed class Notifier
 
     private readonly Action<string, string, bool> _showPopup;
     private readonly Action<string, string, bool> _showBalloon;
+    private readonly Action<double, bool>? _showFullPopup;
 
-    public Notifier(Action<string, string, bool> showPopup, Action<string, string, bool> showBalloon)
+    public Notifier(Action<string, string, bool> showPopup, Action<string, string, bool> showBalloon,
+        Action<double, bool>? showFullPopup = null)
     {
         _showPopup = showPopup;
         _showBalloon = showBalloon;
+        _showFullPopup = showFullPopup;
     }
 
     public void NotifyBattery(AppConfig cfg, double pct)
@@ -37,6 +40,15 @@ public sealed class Notifier
         string message = prefix + "La batería de tu portátil ha llegado al 80 %. Si no necesitas toda la autonomía, " +
             "puedes desconectar el cargador para ayudar a reducir el desgaste de la batería.";
         if (cfg.BatteryMode == "balloon") _showBalloon(title, message, cfg.BatterySound);
+        else _showPopup(title, message, cfg.BatterySound);
+    }
+
+    public void NotifyFull(AppConfig cfg, double pct)
+    {
+        string title = "TempPanel — Batería cargada";
+        string message = $"La batería está al {pct:0} %. Puedes desconectar el cargador si no la necesitas al máximo.";
+        if (cfg.BatteryMode == "balloon") _showBalloon(title, message, cfg.BatterySound);
+        else if (_showFullPopup != null) _showFullPopup(pct, cfg.BatterySound);
         else _showPopup(title, message, cfg.BatterySound);
     }
 }

@@ -38,6 +38,8 @@ public static class AppLogger
     {
         try
         {
+            // En pruebas automatizadas no se ensucia el log del usuario.
+            if (Environment.GetEnvironmentVariable("TEMPANEL_QUIET_LOG") == "1") return;
             lock (_lock)
             {
                 _logFile ??= Path.Combine(LogDirectory, $"temppanel-{DateTime.Now:yyyyMMdd}.log");
@@ -66,6 +68,8 @@ public sealed class AppConfig
     public double BatteryRearm { get; set; } = 75;
     public bool BatterySound { get; set; } = true;
     public string BatteryMode { get; set; } = "popup";
+    // Aviso de carga completa (99 % cargando, rearma bajo 95 %).
+    public bool BatteryFullEnabled { get; set; } = true;
     // Unidad de temperatura: "C" o "F"
     public string Unit { get; set; } = "C";
     public bool StartWithWindows { get; set; } = false;
@@ -98,6 +102,7 @@ public sealed class AppConfig
         BatteryRearm = fresh.BatteryRearm;
         BatterySound = fresh.BatterySound;
         BatteryMode = fresh.BatteryMode;
+        BatteryFullEnabled = fresh.BatteryFullEnabled;
         Unit = fresh.Unit;
         StartWithWindows = fresh.StartWithWindows;
         AutoCheckUpdates = fresh.AutoCheckUpdates;

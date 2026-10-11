@@ -23,7 +23,8 @@ Si falta WebView2, el instalador te muestra el enlace oficial de Microsoft.
 - **RAM**: total, usada, disponible y %.
 - **Batería**: % preciso, estado, alimentación externa, autonomía estimada,
   capacidades de diseño/carga completa, tensión y tasa de descarga (cuando
-  Windows/LHM los exponen). Sin temperatura ni ciclos inventados.
+  Windows/LHM los exponen). Avisos al llegar al valor configurado y al
+  completar la carga (99 %). Sin temperatura ni ciclos inventados.
 - **Refrigeración**: RPM si el EC las publica + temperaturas auxiliares +
   temperatura de almacenamiento (NVMe) si existe sensor.
 - **Todos los sensores**: tabla completa con filtro.

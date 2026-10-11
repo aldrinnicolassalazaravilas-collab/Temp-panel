@@ -8,7 +8,7 @@ const txt = (v) => (v === null || v === undefined || v === "") ? "No disponible"
 let lastSnap = null;
 let cfg = { refreshMs: 2000, cpuWarnTemp: 85, cpuCritTemp: 95, gpuWarnTemp: 80, gpuCritTemp: 90, preferredCpuSensor: "auto",
   unit: "C", startMinimized: false, startWithWindows: false,
-  batteryEnabled: true, batteryThreshold: 80, batteryRearm: 75, batterySound: true, batteryMode: "popup", version: "1.1.1", autoCheckUpdates: false };
+  batteryEnabled: true, batteryThreshold: 80, batteryRearm: 75, batterySound: true, batteryMode: "popup", batteryFull: true, version: "1.1.2", autoCheckUpdates: false };
 let paused = false;
 let history = []; // {t, cpuTemp(C), cpuLoad, ramUsed, gpuTemp(C), batPct}
 const MAXH = 900; // 30 min a 2 s
@@ -182,16 +182,39 @@ function renderSummary(s) {
   const loadV = s.cpu.totalLoad != null ? `${s.cpu.totalLoad.toFixed(1)} <span class="unit">%</span>` : nd;
   const ramV = s.memory.percentUsed != null ? `${s.memory.percentUsed.toFixed(1)} <span class="unit">%</span>` : nd;
   const batV = s.battery.present && s.battery.percent != null ? `${s.battery.percent.toFixed(0)} <span class="unit">%</span>` : nd;
+  const cpuGauge = s.cpu.packageTemp != null
+    ? gaugeSVG(Math.min(1, s.cpu.packageTemp / cfg.cpuCritTemp),
+        tempClass(s.cpu.packageTemp, cfg.cpuWarnTemp, cfg.cpuCritTemp) === "crit-t" ? "#f87171"
+        : tempClass(s.cpu.packageTemp, cfg.cpuWarnTemp, cfg.cpuCritTemp) === "warn-t" ? "#fbbf24" : "#22d3ee",
+        degT(s.cpu.packageTemp))
+    : "";
+  const batRing = s.battery.present && s.battery.percent != null ? ringSVG(s.battery.percent / 100, s.battery.percent.toFixed(0) + " %") : "";
   $("summary-cards").innerHTML =
-    card("CPU · " + txt(s.cpu.packageTempSource || "temperatura"), cpuV, txt(s.cpu.processorName)) +
+    `<div class="card"><h3>CPU · ${esc(txt(s.cpu.packageTempSource || "temperatura"))}</h3><div class="gaugewrap">${cpuGauge}<div class="big">${cpuV}</div></div><div class="muted small">${esc(txt(s.cpu.processorName))}</div></div>` +
     card("Carga CPU", loadV, s.cpu.throttling ? "⚠ posible limitación térmica" : "Carga total") +
     card("RAM en uso", ramV, s.memory.usedMb != null ? `${Math.round(s.memory.usedMb)} / ${Math.round(s.memory.totalMb)} MB` : "Sin datos de memoria") +
-    card("Batería", batV, txt(s.battery.status));
+    `<div class="card"><h3>Batería</h3><div class="gaugewrap">${batRing}<div class="big">${batV}</div></div><div class="muted small">${esc(txt(s.battery.status))}</div></div>`;
+}
+function gaugeSVG(frac, color, label) {
+  const f = Math.max(0, Math.min(1, frac || 0));
+  const len = 251.3; // semicírculo r=80
+  return `<svg viewBox="0 0 200 112" class="gauge"><path d="M 10 100 A 80 80 0 0 1 190 100" fill="none" stroke="#0b1220" stroke-width="14" stroke-linecap="round"/>` +
+    `<path d="M 10 100 A 80 80 0 0 1 190 100" fill="none" stroke="${color}" stroke-width="14" stroke-linecap="round" stroke-dasharray="${(f * len).toFixed(1)} ${len.toFixed(1)}">` +
+    `<animate attributeName="stroke-dasharray" from="0 ${len.toFixed(1)}" to="${(f * len).toFixed(1)} ${len.toFixed(1)}" dur="0.4s" fill="freeze"/></path>` +
+    `<text x="100" y="92" text-anchor="middle" fill="#e6edf6" font-size="17" font-weight="bold">${esc(label)}</text></svg>`;
+}
+function ringSVG(frac, label) {
+  const f = Math.max(0, Math.min(1, frac || 0));
+  const c = 2 * Math.PI * 54;
+  return `<svg viewBox="0 0 130 130" class="ring"><circle cx="65" cy="65" r="54" fill="none" stroke="#0b1220" stroke-width="12"/>` +
+    `<circle cx="65" cy="65" r="54" fill="none" stroke="#22d3ee" stroke-width="12" stroke-linecap="round" transform="rotate(-90 65 65)" stroke-dasharray="${(f * c).toFixed(1)} ${c.toFixed(1)}"/>` +
+    `<text x="65" y="71" text-anchor="middle" fill="#e6edf6" font-size="19" font-weight="bold">${esc(label)}</text></svg>`;
 }
 
 function renderCpu(s) {
   $("cpu-head").innerHTML =
     `<div>Procesador</div><div>${txt(s.cpu.processorName)}</div>` +
+    `<div>Núcleos</div><div>${s.cpu.coresPhysical != null ? s.cpu.coresPhysical + " físicos / " + (s.cpu.coresLogical ?? "?") + " lógicos" : "No disponible"}</div>` +
     `<div>Temperatura paquete</div><div>${degT(s.cpu.packageTemp)}</div>` +
     `<div>Carga total</div><div>${s.cpu.totalLoad != null ? s.cpu.totalLoad.toFixed(1) + " %" : "No disponible"}</div>` +
     `<div>Potencia paquete</div><div>${s.cpu.power != null ? s.cpu.power.toFixed(2) + " W" : "No disponible (sensor no expuesto)"}</div>` +
@@ -317,6 +340,7 @@ function renderSys(s) {
     `<div>Procesador</div><div>${txt(m.cpuName)}</div>` +
     `<div>Memoria instalada</div><div>${m.installedRamMb != null ? Math.round(m.installedRamMb).toLocaleString("es") + " MB" : "No disponible"}</div>` +
     `<div>Tiempo de app</div><div>${txt(m.appUptime)}</div>` +
+    `<div>Equipo encendido</div><div>${m.bootTimeLocal ? txt(m.bootTimeLocal) : "No disponible"}</div>` +
     `<div>Frecuencia</div><div>cada ${(m.refreshMs / 1000)} s</div>` +
     `<div>Última lectura</div><div>${txt(m.lastReadLocal)}</div>` +
     `<div>Permisos</div><div>${m.isAdmin ? "Administrador" : "Usuario estándar"}</div>`;
@@ -487,6 +511,7 @@ function applyCfg() {
   $("cfg-min").checked = !!cfg.startMinimized;
   $("cfg-startup").checked = !!cfg.startWithWindows;
   $("cfg-bat-on").checked = cfg.batteryEnabled !== false;
+  $("cfg-bat-full").checked = cfg.batteryFull !== false;
   $("cfg-bat-th").value = cfg.batteryThreshold ?? 80;
   $("cfg-bat-re").value = cfg.batteryRearm ?? 75;
   $("cfg-bat-sound").checked = cfg.batterySound !== false;
@@ -530,7 +555,7 @@ $("btn-save-bat").addEventListener("click", () => {
   th = Math.min(100, Math.max(50, th));
   re = Math.min(99, Math.max(10, re));
   if (re >= th) { alert("El segundo valor debe ser menor que el primero."); return; }
-  post({ cmd: "setBatteryAlert", enabled: $("cfg-bat-on").checked, threshold: th, rearm: re, sound: $("cfg-bat-sound").checked, mode: $("cfg-bat-mode").value });
+  post({ cmd: "setBatteryAlert", enabled: $("cfg-bat-on").checked, threshold: th, rearm: re, sound: $("cfg-bat-sound").checked, mode: $("cfg-bat-mode").value, full: $("cfg-bat-full").checked });
 });
 $("btn-test-bat").addEventListener("click", () => post({ cmd: "testBatteryAlert" }));
 $("btn-check-upd").addEventListener("click", () => post({ cmd: "checkUpdates" }));

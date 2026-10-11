@@ -19,6 +19,12 @@ public sealed class HardwareMonitor : IDisposable
     // RAM vía PerformanceCounter (más fiable que LHM en portátiles)
     private PerformanceCounter? _availMbCounter;
 
+    // Datos del equipo que no cambian: se consultan una sola vez.
+    private static int? _coresPhysical;
+    private static int? _coresLogical;
+    private static string _bootTimeLocal = "";
+    private static bool _staticInfoLoaded;
+
     // Estadísticas de sesión (mín/máx/promedio desde el arranque de la app)
     private double _cpuTempSum;
     private double _cpuLoadSum;
@@ -72,10 +78,51 @@ public sealed class HardwareMonitor : IDisposable
         catch { return false; }
     }
 
+    private static void EnsureStaticInfo()
+    {
+        if (_staticInfoLoaded) return;
+        _staticInfoLoaded = true;
+        try
+        {
+            using var s = new ManagementObjectSearcher("SELECT NumberOfCores, NumberOfLogicalProcessors FROM Win32_Processor");
+            foreach (ManagementObject mo in s.Get())
+            {
+                _coresPhysical = ToNullableInt(mo["NumberOfCores"]);
+                _coresLogical = ToNullableInt(mo["NumberOfLogicalProcessors"]);
+                break;
+            }
+        }
+        catch (Exception ex) { AppLogger.Error("StaticInfo CPU: " + ex.Message); }
+        try
+        {
+            using var s = new ManagementObjectSearcher("SELECT LastBootUpTime FROM Win32_OperatingSystem");
+            foreach (ManagementObject mo in s.Get())
+            {
+                string? raw = mo["LastBootUpTime"]?.ToString();
+                if (!string.IsNullOrEmpty(raw))
+                    _bootTimeLocal = ManagementDateTimeConverter.ToDateTime(raw).ToString("yyyy-MM-dd HH:mm:ss");
+                break;
+            }
+        }
+        catch (Exception ex) { AppLogger.Error("StaticInfo boot: " + ex.Message); }
+    }
+
+    private static int? ToNullableInt(object? o)
+    {
+        if (o == null) return null;
+        try
+        {
+            int v = Convert.ToInt32(o);
+            return v > 0 ? v : null;
+        }
+        catch { return null; }
+    }
+
     public Snapshot GetSnapshot()
     {
         lock (_lock)
         {
+            EnsureStaticInfo();
             var snap = new Snapshot();
             var warnings = new List<string>();
             try
@@ -120,8 +167,11 @@ public sealed class HardwareMonitor : IDisposable
                 LastReadIso = DateTime.UtcNow.ToString("o"),
                 LastReadLocal = now.ToString("yyyy-MM-dd HH:mm:ss"),
                 IsAdmin = IsRunningAsAdmin(),
-                PreferredCpuSensor = PreferredCpuSensor
+                PreferredCpuSensor = PreferredCpuSensor,
+                BootTimeLocal = _bootTimeLocal
             };
+            snap.Cpu.CoresPhysical = _coresPhysical;
+            snap.Cpu.CoresLogical = _coresLogical;
             snap.Warnings = warnings;
             return snap;
         }

@@ -7,6 +7,10 @@ namespace TempPanel.Tests;
 /// <summary>Comparación de versiones del actualizador (pura, sin red).</summary>
 public sealed class UpdateServiceTests
 {
+    public UpdateServiceTests()
+    {
+        Environment.SetEnvironmentVariable("TEMPANEL_QUIET_LOG", "1");
+    }
     [Theory]
     [InlineData("v1.1.0", 1, 1, 0)]
     [InlineData("1.1.0", 1, 1, 0)]
@@ -51,6 +55,35 @@ public sealed class UpdateServiceTests
         // Sin red externa: localhost cerrado falla al instante.
         var r = await UpdateService.DownloadAndLaunchAsync("http://127.0.0.1:9/nope.exe", "v9.9.9-test");
         Assert.Null(r);
+    }
+
+    [Fact]
+    public void NotifyFull_Uses_Popup_Action()
+    {
+        double gotPct = 0;
+        var n = new Notifier((_, _, _) => { }, (_, _, _) => { }, (p, _) => { gotPct = p; });
+        var cfg = new AppConfig { BatterySound = false, BatteryMode = "popup" };
+        n.NotifyFull(cfg, 99.0);
+        Assert.Equal(99.0, gotPct);
+    }
+
+    [Fact]
+    public void FullAlert_Fires_Once_At_99_Charging()
+    {
+        var svc = new BatteryAlertService(new BatteryAlertOptions
+        {
+            Enabled = true, ThresholdPct = 99, RearmPct = 95
+        });
+        int count = 0;
+        svc.AlertTriggered += (_, _) => count++;
+        Assert.False(svc.Evaluate(98.0, charging: true));
+        Assert.True(svc.Evaluate(99.0, charging: true));
+        Assert.False(svc.Evaluate(99.5, charging: true));
+        Assert.False(svc.Evaluate(99.0, charging: false));
+        Assert.Equal(1, count);
+        Assert.False(svc.Evaluate(94.9, charging: true)); // rearma
+        Assert.True(svc.Evaluate(99.0, charging: true));
+        Assert.Equal(2, count);
     }
 
     [Fact]

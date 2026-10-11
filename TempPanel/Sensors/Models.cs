@@ -31,6 +31,8 @@ public sealed class CpuData
     public List<double?> CoreClocks { get; set; } = new();
     public double? Power { get; set; }
     public bool Throttling { get; set; }
+    public int? CoresPhysical { get; set; }
+    public int? CoresLogical { get; set; }
     // Distancia a TjMax por núcleo ("Distance to TjMax"): indicador de margen térmico.
     // Solo se informa si el firmware lo expone; null/vacío = no disponible.
     public List<string> TjMaxNames { get; set; } = new();
@@ -139,6 +141,8 @@ public sealed class SystemMeta
     public string LastReadLocal { get; set; } = "";
     public bool IsAdmin { get; set; }
     public string PreferredCpuSensor { get; set; } = "auto";
+    // Arranque del sistema (hora local legible).
+    public string BootTimeLocal { get; set; } = "";
 }
 
 public sealed class Snapshot

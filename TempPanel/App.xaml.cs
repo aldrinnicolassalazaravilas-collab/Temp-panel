@@ -37,7 +37,7 @@ public partial class App : System.Windows.Application
             AppLogger.Error("DispatcherException: " + ex.Exception);
             ex.Handled = true;
         };
-        AppLogger.Info("TempPanel iniciado v1.1.1");
+        AppLogger.Info("TempPanel iniciado v1.1.2");
 
         try { _appMutex = new System.Threading.Mutex(true, "TempPanelAppMutex"); }
         catch (Exception ex) { AppLogger.Error("Mutex: " + ex.Message); }
@@ -76,7 +76,9 @@ public partial class App : System.Windows.Application
         if (args.Any(a => a.Equals("--test-battery-alert", StringComparison.OrdinalIgnoreCase)))
         {
             var cfg = Sensors.AppConfig.Load();
-            var win = new BatteryAlertWindow(cfg.BatteryThreshold, isTest: true);
+            var win = new BatteryAlertWindow(
+                $"TempPanel — Batería al {cfg.BatteryThreshold:0} %",
+                BatteryAlertWindow.ThresholdMessage(cfg.BatteryThreshold), isTest: true);
             win.Closed += (_, __) => Shutdown();
             win.Show();
             return;
