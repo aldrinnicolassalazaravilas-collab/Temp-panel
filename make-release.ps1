@@ -5,7 +5,7 @@ $ErrorActionPreference = "Stop"
 
 $owner = "aldrinnicolassalazaravilas-collab"
 $repo = "Temp-panel"
-$tag = "v1.1.2"
+$tag = "v1.1.3"
 $asset = "C:\tempanel\dist\TempPanel-Setup-x64.exe"
 
 if (-not (Test-Path $asset)) { Write-Output "FALTA asset: $asset"; exit 1 }

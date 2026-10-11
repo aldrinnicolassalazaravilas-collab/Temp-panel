@@ -8,7 +8,7 @@ const txt = (v) => (v === null || v === undefined || v === "") ? "No disponible"
 let lastSnap = null;
 let cfg = { refreshMs: 2000, cpuWarnTemp: 85, cpuCritTemp: 95, gpuWarnTemp: 80, gpuCritTemp: 90, preferredCpuSensor: "auto",
   unit: "C", startMinimized: false, startWithWindows: false,
-  batteryEnabled: true, batteryThreshold: 80, batteryRearm: 75, batterySound: true, batteryMode: "popup", batteryFull: true, version: "1.1.2", autoCheckUpdates: false };
+  batteryEnabled: true, batteryThreshold: 80, batteryRearm: 75, batterySound: true, batteryMode: "popup", batteryFull: true, version: "1.1.3", autoCheckUpdates: false };
 let paused = false;
 let history = []; // {t, cpuTemp(C), cpuLoad, ramUsed, gpuTemp(C), batPct}
 const MAXH = 900; // 30 min a 2 s
@@ -143,6 +143,8 @@ function renderAll(s) {
   else if (cw) { alertTxt = `⚠ CPU a ${deg(cpuT)} (aviso ${deg(cfg.cpuWarnTemp)})`; alertCls = "alert warn"; }
   else if (gw) { alertTxt = `⚠ GPU a ${deg(gpuT)} (aviso ${deg(cfg.gpuWarnTemp)})`; alertCls = "alert warn"; }
   ab.className = alertCls; ab.textContent = alertTxt;
+  const hd = $("health-dot");
+  if (hd) hd.className = "health " + (alertCls.includes("crit") ? "crit" : alertCls.includes("warn") ? "warn" : "ok");
 
   // Avisos de disponibilidad
   const wb = $("warn-bar");
@@ -189,11 +191,27 @@ function renderSummary(s) {
         degT(s.cpu.packageTemp))
     : "";
   const batRing = s.battery.present && s.battery.percent != null ? ringSVG(s.battery.percent / 100, s.battery.percent.toFixed(0) + " %") : "";
+  const spCpu = sparkline(convT(seriesOf("cpuTemp", 300)), "#22d3ee");
+  const spLoad = sparkline(seriesOf("cpuLoad", 300), "#2f7bff");
+  const spRam = sparkline(history.filter(p => p.t >= new Date(Date.now() - 300000)).map(p => p.ramUsed), "#a78bfa");
+  const spBat = sparkline(seriesOf("batPct", 300), "#34d399");
   $("summary-cards").innerHTML =
-    `<div class="card"><h3>CPU · ${esc(txt(s.cpu.packageTempSource || "temperatura"))}</h3><div class="gaugewrap">${cpuGauge}<div class="big">${cpuV}</div></div><div class="muted small">${esc(txt(s.cpu.processorName))}</div></div>` +
-    card("Carga CPU", loadV, s.cpu.throttling ? "⚠ posible limitación térmica" : "Carga total") +
-    card("RAM en uso", ramV, s.memory.usedMb != null ? `${Math.round(s.memory.usedMb)} / ${Math.round(s.memory.totalMb)} MB` : "Sin datos de memoria") +
-    `<div class="card"><h3>Batería</h3><div class="gaugewrap">${batRing}<div class="big">${batV}</div></div><div class="muted small">${esc(txt(s.battery.status))}</div></div>`;
+    `<div class="card"><h3>CPU · ${esc(txt(s.cpu.packageTempSource || "temperatura"))}</h3><div class="gaugewrap">${cpuGauge}<div class="big">${cpuV}</div></div>${spCpu}<div class="muted small">${esc(txt(s.cpu.processorName))}</div></div>` +
+    `<div class="card"><h3>Carga CPU</h3><div class="big">${loadV}</div>${spLoad}<div class="muted small">${s.cpu.throttling ? "⚠ posible limitación térmica" : "Carga total"}</div></div>` +
+    `<div class="card"><h3>RAM en uso</h3><div class="big">${ramV}</div>${spRam}<div class="muted small">${s.memory.usedMb != null ? `${Math.round(s.memory.usedMb)} / ${Math.round(s.memory.totalMb)} MB` : "Sin datos de memoria"}</div></div>` +
+    `<div class="card"><h3>Batería</h3><div class="gaugewrap">${batRing}<div class="big">${batV}</div></div>${spBat}<div class="muted small">${esc(txt(s.battery.status))}</div></div>`;
+}
+function sparkline(vals, color) {
+  const pts = (vals || []).filter(v => v !== null && v !== undefined);
+  if (pts.length < 2) return "";
+  const w = 220, h = 44;
+  const min = Math.min(...pts), max = Math.max(...pts);
+  const rg = (max - min) < 1e-6 ? 1 : (max - min);
+  const X = (i) => (w * i / (vals.length - 1)).toFixed(1);
+  const Y = (v) => (h - 4 - (h - 8) * ((v - min) / rg)).toFixed(1);
+  let d = "";
+  vals.forEach((v, i) => { if (v === null || v === undefined) return; d += (d ? " L" : "M") + X(i) + " " + Y(v); });
+  return `<svg viewBox="0 0 ${w} ${h}" class="spark" preserveAspectRatio="none"><path d="${d}" fill="none" stroke="${color}" stroke-width="2"/></svg>`;
 }
 function gaugeSVG(frac, color, label) {
   const f = Math.max(0, Math.min(1, frac || 0));
