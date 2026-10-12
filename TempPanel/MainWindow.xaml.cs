@@ -26,6 +26,7 @@ public partial class MainWindow : Window
     private readonly JsonSerializerOptions _jsonOpts = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     private bool _webReady;
     private bool _allowClose;
+    private MiniWindow? _mini;
 
     public MainWindow()
     {
@@ -59,6 +60,7 @@ public partial class MainWindow : Window
         _tray.DoubleClick += (_, __) => RestoreWindow();
         var menu = new System.Windows.Forms.ContextMenuStrip();
         menu.Items.Add("Abrir TempPanel", null, (_, __) => RestoreWindow());
+        menu.Items.Add("Mini ventana", null, (_, __) => OpenMini());
         menu.Items.Add("Salir", null, (_, __) => ExitApp());
         _tray.ContextMenuStrip = menu;
 
@@ -212,6 +214,7 @@ public partial class MainWindow : Window
                     PushSnapshot();
                     break;
                 case "restartAdmin": RestartAsAdmin(); break;
+                case "openMini": OpenMini(); break;
                 case "openLogs":
                     try
                     {
@@ -288,6 +291,7 @@ public partial class MainWindow : Window
                 try { Web.CoreWebView2?.PostWebMessageAsJson(json); }
                 catch (Exception ex) { AppLogger.Error("PostMessage: " + ex.Message); }
                 try { UpdateTray(snap); } catch { }
+                try { _mini?.Update(snap); } catch { }
             });
         }
         catch (Exception ex) { AppLogger.Error("PushSnapshot: " + ex); }
@@ -489,9 +493,33 @@ public partial class MainWindow : Window
 
     private void RestoreWindow()
     {
+        try
+        {
+            if (_mini != null) { try { _mini.Close(); } catch { } _mini = null; }
+        }
+        catch { }
         Show();
         WindowState = WindowState.Normal;
         Activate();
+    }
+
+    private void OpenMini()
+    {
+        try
+        {
+            if (_mini == null)
+            {
+                _mini = new MiniWindow(RestoreWindow);
+                _mini.Closed += (_, __) => { _mini = null; };
+                _mini.Show();
+            }
+            else
+            {
+                _mini.Activate();
+            }
+            Hide(); // la principal se esconde; la mini queda fija encima
+        }
+        catch (Exception ex) { AppLogger.Error("OpenMini: " + ex.Message); }
     }
 
     private void ExitApp()
@@ -505,6 +533,11 @@ public partial class MainWindow : Window
         try { _sensorTimer.Dispose(); } catch { }
         try { _batteryTimer.Dispose(); } catch { }
         try { _monitor.Dispose(); } catch { }
+        try
+        {
+            if (_mini != null) { try { _mini.Close(); } catch { } _mini = null; }
+        }
+        catch { }
         try { _tray.Visible = false; _tray.Dispose(); } catch { }
         AppLogger.Info("TempPanel cerrado correctamente.");
     }

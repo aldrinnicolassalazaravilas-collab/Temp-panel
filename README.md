@@ -52,6 +52,12 @@ Cerrar la ventana minimiza a la bandeja (sigue monitorizando). Doble clic o
 abrir de nuevo restaura la existente. El icono muestra el resumen vivo
 (CPU, carga y batería). En Ajustes hay botón para abrir la carpeta de registros.
 
+## Mini ventana
+
+Botón **Mini** (arriba a la derecha) o desde la bandeja: ventana pequeña que se
+puede fijar encima de otras apps, con temperatura, carga, batería y minigráfico.
+Arrastrable, sin foco robado; doble clic o ✕ vuelve a la principal.
+
 ## Desinstalar
 
 Panel de control → Programas → TempPanel → Desinstalar. Solo borra lo suyo.
