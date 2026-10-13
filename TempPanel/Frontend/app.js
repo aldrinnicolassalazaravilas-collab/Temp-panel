@@ -8,7 +8,7 @@ const txt = (v) => (v === null || v === undefined || v === "") ? "No disponible"
 let lastSnap = null;
 let cfg = { refreshMs: 2000, cpuWarnTemp: 85, cpuCritTemp: 95, gpuWarnTemp: 80, gpuCritTemp: 90, preferredCpuSensor: "auto",
   unit: "C", startMinimized: false, startWithWindows: false,
-  batteryEnabled: true, batteryThreshold: 80, batteryRearm: 75, batterySound: true, batteryMode: "popup", batteryFull: true, version: "1.1.4", autoCheckUpdates: false };
+  batteryEnabled: true, batteryThreshold: 80, batteryRearm: 75, batterySound: true, batteryMode: "popup", batteryFull: true, version: "1.2.4", autoCheckUpdates: false };
 let paused = false;
 let history = []; // {t, cpuTemp(C), cpuLoad, ramUsed, gpuTemp(C), batPct}
 const MAXH = 900; // 30 min a 2 s
@@ -47,6 +47,27 @@ $("btn-pause").addEventListener("click", () => {
 });
 $("btn-snapshot").addEventListener("click", () => post({ cmd: "getSnapshot" }));
 $("btn-mini").addEventListener("click", () => post({ cmd: "openMini" }));
+$("btn-copy").addEventListener("click", () => {
+  if (!lastSnap) return;
+  const s = lastSnap;
+  const L = [
+    `TempPanel — ${s.meta.lastReadLocal || ""}`,
+    `CPU: ${s.cpu.processorName || "?"} | Temp: ${s.cpu.packageTemp != null ? s.cpu.packageTemp.toFixed(1) + " °C" : "no disponible"} | Carga: ${s.cpu.totalLoad != null ? s.cpu.totalLoad.toFixed(1) + " %" : "—"}`,
+    `RAM: ${s.memory.usedMb != null ? Math.round(s.memory.usedMb) + "/" + Math.round(s.memory.totalMb) + " MB" : "—"} (${s.memory.percentUsed != null ? s.memory.percentUsed.toFixed(1) + " %" : "—"})`,
+    `GPU: ${s.gpu.name || "?"} | Temp: ${s.gpu.temp != null ? s.gpu.temp.toFixed(1) + " °C" : "no disponible"} | Carga: ${s.gpu.load != null ? s.gpu.load.toFixed(1) + " %" : "—"}`,
+    `Batería: ${s.battery.present && s.battery.percent != null ? s.battery.percent.toFixed(0) + " % (" + s.battery.status + ")" : "—"}`
+  ].join("\n");
+  const done = () => { $("btn-copy").textContent = "✓ Copiado"; setTimeout(() => $("btn-copy").textContent = "⧉ Copiar resumen", 1500); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(L).then(done).catch(() => fallbackCopy(L, done));
+  else fallbackCopy(L, done);
+});
+function fallbackCopy(text, done) {
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    document.execCommand("copy"); ta.remove(); done();
+  } catch { }
+}
 
 // ---------- Recepción ----------
 if (window.chrome && chrome.webview) {
@@ -106,8 +127,8 @@ function pushHist(s) {
 }
 
 // ---------- Render ----------
-function card(title, valueHtml, sub) {
-  return `<div class="card"><h3>${title}</h3><div class="big">${valueHtml}</div><div class="muted small">${sub || ""}</div></div>`;
+function card(title, valueHtml, sub, cls) {
+  return `<div class="card ${cls || ""}"><h3>${title}</h3><div class="big">${valueHtml}</div><div class="muted small">${sub || ""}</div></div>`;
 }
 const nd = '<span class="nd">No disponible</span>';
 
@@ -162,15 +183,21 @@ function renderAll(s) {
     const drv = d.driverBlocked === true ? "Sí, Windows lo bloqueó"
       : d.driverBlocked === false ? "No se encontraron bloqueos"
       : "No comprobable sin administrador";
+    const stateTxt = { ok: "Funcionando (hay lecturas)", noadmin: "Sin intentar (falta administrador)",
+      blocked: "Bloqueado por Windows", "loaded-noread": "Cargado pero sin lecturas",
+      "not-deployed": "Ni se desplegó", unknown: "Desconocido" }[(d.driverState || "unknown")] || "Desconocido";
     dg.innerHTML =
       `<div>Permisos</div><div>${d.isAdmin ? "Administrador" : "Usuario estándar"}</div>` +
       `<div>Integridad de memoria</div><div>${d.hvciEnabled ? "Activada (bloquea el driver de temperatura)" : "Desactivada"}</div>` +
       `<div>Driver bloqueado</div><div>${drv}</div>` +
+      `<div>Estado del driver</div><div>${stateTxt}</div>` +
       `<div>Temps. CPU con valor</div><div>${d.cpuTempWithValue} de ${d.cpuTempSensors}</div>` +
       `<div>Sensores con valor</div><div>${d.sensorsWithValue} de ${d.totalSensors}</div>`;
     if (da) {
       if (d.cpuTempWithValue > 0) da.textContent = "El equipo publica temperaturas de CPU: las verás en la sección CPU.";
-      else if (d.driverBlocked === true) da.textContent = "Confirmado: Windows bloqueó el controlador de lectura. Para ver temperaturas, desactiva la integridad de memoria y reinicia (o mantenla y usa el resto de sensores).";
+      else if (d.driverState === "blocked") da.textContent = "Confirmado: Windows bloqueó el controlador de lectura. Para ver temperaturas, desactiva la integridad de memoria y reinicia (o mantenla y usa el resto de sensores).";
+      else if (d.driverState === "loaded-noread") da.textContent = "El driver carga pero no obtiene valores: posible incompatibilidad con este firmware. Repórtalo con el botón de registros.";
+      else if (d.driverState === "not-deployed") da.textContent = "El driver ni se desplegó aun como administrador: reinstala la app o prueba otro reinicio elevado.";
       else if (d.hvciEnabled) da.textContent = "Sin valores de temperatura y con integridad activada: es el bloqueo probable. Desactívala y reinicia para comprobarlo.";
       else if (!d.isAdmin) da.textContent = "Prueba «Reiniciar como administrador» en Configuración → Permisos.";
       else da.textContent = "El firmware no entrega temperaturas al sistema. Se muestran el resto de sensores reales.";
@@ -196,11 +223,13 @@ function renderSummary(s) {
   const spLoad = sparkline(seriesOf("cpuLoad", 300), "#2f7bff");
   const spRam = sparkline(history.filter(p => p.t >= new Date(Date.now() - 300000)).map(p => p.ramUsed), "#a78bfa");
   const spBat = sparkline(seriesOf("batPct", 300), "#34d399");
+  const stCpu = tempClass(s.cpu.packageTemp, cfg.cpuWarnTemp, cfg.cpuCritTemp);
+  const stCls = (t) => t === "crit-t" ? "st-crit" : t === "warn-t" ? "st-warn" : t === "ok-t" ? "st-ok" : "";
   $("summary-cards").innerHTML =
-    `<div class="card"><h3>CPU · ${esc(txt(s.cpu.packageTempSource || "temperatura"))}</h3><div class="gaugewrap">${cpuGauge}<div class="big">${cpuV}</div></div>${spCpu}<div class="muted small">${esc(txt(s.cpu.processorName))}</div></div>` +
-    `<div class="card"><h3>Carga CPU</h3><div class="big">${loadV}</div>${spLoad}<div class="muted small">${s.cpu.throttling ? "⚠ posible limitación térmica" : "Carga total"}</div></div>` +
-    `<div class="card"><h3>RAM en uso</h3><div class="big">${ramV}</div>${spRam}<div class="muted small">${s.memory.usedMb != null ? `${Math.round(s.memory.usedMb)} / ${Math.round(s.memory.totalMb)} MB` : "Sin datos de memoria"}</div></div>` +
-    `<div class="card"><h3>Batería</h3><div class="gaugewrap">${batRing}<div class="big">${batV}</div></div>${spBat}<div class="muted small">${esc(txt(s.battery.status))}</div></div>`;
+    `<div class="card ${stCls(stCpu)}"><h3>CPU · ${esc(txt(s.cpu.packageTempSource || "temperatura"))}</h3><div class="gaugewrap">${cpuGauge}<div class="big">${cpuV}</div></div>${spCpu}<div class="muted small">${esc(txt(s.cpu.processorName))}</div></div>` +
+    `<div class="card ${s.cpu.totalLoad != null && s.cpu.totalLoad >= 90 ? "st-warn" : "st-ok"}"><h3>Carga CPU</h3><div class="big">${loadV}</div>${spLoad}<div class="muted small">${s.cpu.throttling ? "⚠ posible limitación térmica" : "Carga total"}</div></div>` +
+    `<div class="card ${s.memory.percentUsed != null && s.memory.percentUsed >= 90 ? "st-warn" : "st-ok"}"><h3>RAM en uso</h3><div class="big">${ramV}</div>${spRam}<div class="muted small">${s.memory.usedMb != null ? `${Math.round(s.memory.usedMb)} / ${Math.round(s.memory.totalMb)} MB` : "Sin datos de memoria"}</div></div>` +
+    `<div class="card ${s.battery.present && s.battery.percent != null && s.battery.percent <= 15 ? "st-warn" : "st-ok"}"><h3>Batería</h3><div class="gaugewrap">${batRing}<div class="big">${batV}</div></div>${spBat}<div class="muted small">${esc(txt(s.battery.status))}</div></div>`;
 }
 function sparkline(vals, color) {
   const pts = (vals || []).filter(v => v !== null && v !== undefined);

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Management;
 using System.Windows.Forms;
 using LibreHardwareMonitor.Hardware;
@@ -598,7 +599,7 @@ public sealed class HardwareMonitor : IDisposable
                 if (s.Value.HasValue) cpuWith++;
             }
         }
-        return new DetectionDiagnostics
+        var diag = new DetectionDiagnostics
         {
             IsAdmin = IsRunningAsAdmin(),
             HvciEnabled = IsHvciEnabled(),
@@ -608,6 +609,8 @@ public sealed class HardwareMonitor : IDisposable
             SensorsWithValue = snap.AllSensors.Count(s => s.Value.HasValue),
             DriverBlocked = CheckDriverBlocked()
         };
+        diag.DriverState = ResolveDriverState(diag);
+        return diag;
     }
 
     private static bool IsHvciEnabled()
@@ -633,6 +636,62 @@ public sealed class HardwareMonitor : IDisposable
     /// </summary>
     private bool? _driverBlockedCache;
     private DateTime _driverBlockedAt;
+    private string _driverStateCache = "unknown";
+
+    /// <summary>
+    /// Clasifica el acceso al driver: ok (hay lecturas), noadmin (sin intentar),
+    /// blocked (Windows lo frenó), loaded-noread (cargado pero sin valores),
+    /// not-deployed (ni se desplegó), unknown. Con caché de 10 minutos.
+    /// </summary>
+    private string ResolveDriverState(DetectionDiagnostics diag)
+    {
+        try
+        {
+            if (diag.CpuTempWithValue > 0) return "ok";
+            if (!diag.IsAdmin) return "noadmin";
+            if (DateTime.Now - _driverBlockedAt < TimeSpan.FromMinutes(10) && _driverStateCache != "unknown")
+                return _driverStateCache;
+            string state;
+            if (diag.DriverBlocked == true) state = "blocked";
+            else if (IsRing0Deployed()) state = "loaded-noread";
+            else state = diag.DriverBlocked == false ? "not-deployed" : "unknown";
+            _driverStateCache = state;
+            return state;
+        }
+        catch { return "unknown"; }
+    }
+
+    /// <returns>true si el servicio o el .sys de WinRing0 existen ahora mismo.</returns>
+    private static bool IsRing0Deployed()
+    {
+        try
+        {
+            using var s = new ManagementObjectSearcher(
+                "SELECT Name FROM Win32_Service WHERE Name LIKE '%Ring0%'");
+            foreach (var _ in s.Get()) return true;
+        }
+        catch { }
+        try
+        {
+            string[] dirs =
+            {
+                Path.GetTempPath(),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "drivers")
+            };
+            foreach (var d in dirs)
+            {
+                try
+                {
+                    foreach (var f in Directory.GetFiles(d, "*Ring0*.sys"))
+                        return true;
+                }
+                catch { }
+            }
+        }
+        catch { }
+        return false;
+    }
 
     private bool? CheckDriverBlocked()
     {

@@ -37,7 +37,7 @@ public partial class App : System.Windows.Application
             AppLogger.Error("DispatcherException: " + ex.Exception);
             ex.Handled = true;
         };
-        AppLogger.Info("TempPanel iniciado v1.1.4");
+        AppLogger.Info("TempPanel iniciado v1.2.4");
 
         try { _appMutex = new System.Threading.Mutex(true, "TempPanelAppMutex"); }
         catch (Exception ex) { AppLogger.Error("Mutex: " + ex.Message); }

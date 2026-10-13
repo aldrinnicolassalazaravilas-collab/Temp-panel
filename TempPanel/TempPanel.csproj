@@ -12,9 +12,9 @@
     <AssemblyCompany>TempPanel</AssemblyCompany>
     <AssemblyProduct>TempPanel</AssemblyProduct>
     <AssemblyDescription>Monitor de hardware en tiempo real</AssemblyDescription>
-    <AssemblyVersion>1.1.4.0</AssemblyVersion>
-    <FileVersion>1.1.4.0</FileVersion>
-    <Version>1.1.4</Version>
+    <AssemblyVersion>1.2.4.0</AssemblyVersion>
+    <FileVersion>1.2.4.0</FileVersion>
+    <Version>1.2.4</Version>
     <Copyright>Copyright © 2026 TempPanel</Copyright>
     <ApplicationManifest>Properties\app.manifest</ApplicationManifest>
     <ApplicationIcon>app.ico</ApplicationIcon>

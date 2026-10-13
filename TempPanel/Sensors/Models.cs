@@ -77,6 +77,9 @@ public sealed class DetectionDiagnostics
     // true = Windows bloqueó el driver (verificado en el registro de eventos);
     // false = sin bloqueos; null = no se pudo comprobar (p. ej. sin admin).
     public bool? DriverBlocked { get; set; }
+    // Estado del driver de bajo nivel: ok | noadmin | blocked | loaded-noread |
+    // not-deployed | unknown. Ver BuildDiagnostics.
+    public string DriverState { get; set; } = "unknown";
 }
 
 public sealed class BatteryData

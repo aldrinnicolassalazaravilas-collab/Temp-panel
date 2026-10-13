@@ -25,6 +25,8 @@ Si falta WebView2, el instalador te muestra el enlace oficial de Microsoft.
   capacidades de diseño/carga completa, tensión y tasa de descarga (cuando
   Windows/LHM los exponen). Avisos al llegar al valor configurado y al
   completar la carga (99 %). Sin temperatura ni ciclos inventados.
+- **Ayuda**: diagnóstico del driver de temperatura (funcionando, bloqueado,
+  sin intentar…) para saber exactamente por qué no hay lecturas.
 - **Refrigeración**: RPM si el EC las publica + temperaturas auxiliares +
   temperatura de almacenamiento (NVMe) si existe sensor.
 - **Todos los sensores**: tabla completa con filtro.
