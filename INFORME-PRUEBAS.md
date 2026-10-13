@@ -29,6 +29,10 @@ Distingue pruebas automatizadas, compilación y pruebas reales en el dispositivo
   0 ventiladores (aviso honesto), 97 sensores. Potencia CPU 0 → nulo (no ficticio).
 - Cálculo de % de batería: LHM Charge Level + PowerStatus, verificado coherente.
 - CSV: cabecera + filas con nulos vacíos, verificado por script.
+- Pipeline de temperatura (frontend): verificado con snapshot sintético SOLO en
+  pruebas (`uitest/run.js`, 11/11): tarjetas, gauges, sesión, diagnósticos,
+  gráficas y alertas (oculta a 54 °C, crítica a 96 °C). La lectura de hardware
+  queda pendiente de ejecución elevada (ver §9 / TUTORIAL.md).
 
 ## 5. Alerta de batería (§12.7–12.10)
 - Ventana `--test-battery-alert` aparece con título y botón OK (automatización UIA).

@@ -2,7 +2,9 @@
 bin/
 obj/
 publish/
+staging*/
 dist/
+node_modules/
 *.user
 .vs/
 # TempPanel locales (config/logs del usuario, no van al repo)
