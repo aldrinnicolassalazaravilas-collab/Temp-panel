@@ -8,7 +8,7 @@ const txt = (v) => (v === null || v === undefined || v === "") ? "No disponible"
 let lastSnap = null;
 let cfg = { refreshMs: 2000, cpuWarnTemp: 85, cpuCritTemp: 95, gpuWarnTemp: 80, gpuCritTemp: 90, preferredCpuSensor: "auto",
   unit: "C", startMinimized: false, startWithWindows: false,
-  batteryEnabled: true, batteryThreshold: 80, batteryRearm: 75, batterySound: true, batteryMode: "popup", batteryFull: true, version: "1.2.4", autoCheckUpdates: false };
+  batteryEnabled: true, batteryThreshold: 80, batteryRearm: 75, batterySound: true, batteryMode: "popup", batteryFull: true, version: "1.2.5", autoCheckUpdates: false };
 let paused = false;
 let history = []; // {t, cpuTemp(C), cpuLoad, ramUsed, gpuTemp(C), batPct}
 const MAXH = 900; // 30 min a 2 s
@@ -197,7 +197,7 @@ function renderAll(s) {
       if (d.cpuTempWithValue > 0) da.textContent = "El equipo publica temperaturas de CPU: las verás en la sección CPU.";
       else if (d.driverState === "blocked") da.textContent = "Confirmado: Windows bloqueó el controlador de lectura. Para ver temperaturas, desactiva la integridad de memoria y reinicia (o mantenla y usa el resto de sensores).";
       else if (d.driverState === "loaded-noread") da.textContent = "El driver carga pero no obtiene valores: posible incompatibilidad con este firmware. Repórtalo con el botón de registros.";
-      else if (d.driverState === "not-deployed") da.textContent = "El driver ni se desplegó aun como administrador: reinstala la app o prueba otro reinicio elevado.";
+      else if (d.driverState === "not-deployed") da.textContent = "El driver ni se desplegó aun como administrador: lo más probable es que el antivirus lo pusiera en cuarentena al extraerse. Mira Seguridad de Windows → Historial de protección → busca WinRing0, restaúralo o exclúyelo, y reabre como admin.";
       else if (d.hvciEnabled) da.textContent = "Sin valores de temperatura y con integridad activada: es el bloqueo probable. Desactívala y reinicia para comprobarlo.";
       else if (!d.isAdmin) da.textContent = "Prueba «Reiniciar como administrador» en Configuración → Permisos.";
       else da.textContent = "El firmware no entrega temperaturas al sistema. Se muestran el resto de sensores reales.";

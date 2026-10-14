@@ -48,6 +48,22 @@ Entonces deberían aparecer paquete, núcleos y margen a TjMax. Ten en cuenta
 que desactivar esta protección reduce la seguridad del sistema; puedes volver
 a activarla cuando quieras (repite los pasos al revés).
 
+### Si el estado dice «Ni se desplegó» (antivirus)
+
+Aunque seas administrador, el antivirus puede poner en cuarentena el archivo
+del driver (WinRing0) en cuanto LibreHardwareMonitor lo extrae, antes de que
+Windows lo bloquee siquiera. Compruébalo:
+
+1. Abre **Seguridad de Windows → Protección contra virus y amenazas →
+   Historial de protección**.
+2. Busca **WinRing0** (puede aparecer como HackTool o controlador vulnerable).
+3. Si está: elígela → **Acciones → Permitir/Restaurar** (solo si confías en
+   TempPanel; el driver es de código abierto, el mismo que usan LibreHardwareMonitor
+   y proyectos afines). Alternativa: añade una exclusión para ese archivo.
+4. Cierra TempPanel del todo y **reábelo como administrador**.
+5. Mira Ayuda → «Estado del driver»: debería pasar a «Funcionando» y aparecer
+   las temperaturas.
+
 ## Métodos alternativos buscados en este equipo (2026-10-09)
 
 Se interrogó directamente el portátil; ninguno ofrece la temperatura de CPU
