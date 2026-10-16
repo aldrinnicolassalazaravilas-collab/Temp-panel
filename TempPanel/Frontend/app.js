@@ -8,7 +8,7 @@ const txt = (v) => (v === null || v === undefined || v === "") ? "No disponible"
 let lastSnap = null;
 let cfg = { refreshMs: 2000, cpuWarnTemp: 85, cpuCritTemp: 95, gpuWarnTemp: 80, gpuCritTemp: 90, preferredCpuSensor: "auto",
   unit: "C", startMinimized: false, startWithWindows: false,
-  batteryEnabled: true, batteryThreshold: 80, batteryRearm: 75, batterySound: true, batteryMode: "popup", batteryFull: true, version: "1.3.3", autoCheckUpdates: false };
+  batteryEnabled: true, batteryThreshold: 80, batteryRearm: 75, batterySound: true, batteryMode: "popup", batteryFull: true, version: "1.3.4", autoCheckUpdates: false, firstRun: true };
 let paused = false;
 let history = []; // {t, cpuTemp(C), cpuLoad, ramUsed, gpuTemp(C), batPct}
 const MAXH = 900; // 30 min a 2 s
@@ -278,14 +278,27 @@ function renderCpu(s) {
     `<div>Temperatura paquete</div><div>${degT(s.cpu.packageTemp)}</div>` +
     `<div>Carga total</div><div>${s.cpu.totalLoad != null ? s.cpu.totalLoad.toFixed(1) + " %" : "No disponible"}</div>` +
     `<div>Potencia paquete</div><div>${s.cpu.power != null ? s.cpu.power.toFixed(2) + " W" : "No disponible (sensor no expuesto)"}</div>` +
+    `<div>Límite térmico (TjMax)</div><div>${s.cpu.tjMaxC != null ? degT(s.cpu.tjMaxC) + " (del procesador)" : "No disponible"}</div>` +
     `<div>Limitación térmica</div><div>${s.cpu.throttling ? "⚠ Detectada" : "No detectada"}</div>`;
   $("cpu-source-note").textContent = s.cpu.packageTempSource ? "Sensor seleccionado: " + s.cpu.packageTempSource : "Sin sensor de temperatura de CPU disponible.";
   buildCpuSensorSelect(s);
   const sess = s.session || {};
+  let hottest = "—";
+  {
+    let mx = null, mi = -1;
+    (s.cpu.coreTemps || []).forEach((v, i) => {
+      if (v != null && (mx === null || v > mx)) { mx = v; mi = i; }
+    });
+    if (mx !== null) {
+      const nm = (s.cpu.coreTempNames && s.cpu.coreTempNames[mi]) ? shortName(s.cpu.coreTempNames[mi]) : ("Núcleo " + mi);
+      hottest = `${nm} · ${degT(mx)}`;
+    }
+  }
   $("cpu-session").innerHTML =
     `<div>Temp. mínima (sesión)</div><div>${degT(sess.cpuTempMin)}</div>` +
     `<div>Temp. máxima (sesión)</div><div>${degT(sess.cpuTempMax)}</div>` +
     `<div>Temp. promedio (sesión)</div><div>${degT(sess.cpuTempAvg)}</div>` +
+    `<div>Núcleo más caliente</div><div>${hottest}</div>` +
     `<div>Carga máx. (sesión)</div><div>${sess.cpuLoadMax != null ? sess.cpuLoadMax.toFixed(1) + " %" : "No disponible"}</div>` +
     `<div>Muestras</div><div>${sess.samples != null ? sess.samples : "—"}</div>`;
   $("cpu-cards").innerHTML =
@@ -564,8 +577,7 @@ $("btn-log").addEventListener("click", () => {
 
 // ---------- Config ----------
 function applyCfg() {
-  $("cfg-refresh").value = Math.round(cfg.refreshMs / 1000);
-  $("cfg-cpu-warn").value = cfg.cpuWarnTemp; $("cfg-cpu-crit").value = cfg.cpuCritTemp;
+  $("cfg-refresh").value = Math.round(cfg.refreshMs / 1000);  $("cfg-cpu-warn").value = cfg.cpuWarnTemp; $("cfg-cpu-crit").value = cfg.cpuCritTemp;
   $("cfg-gpu-warn").value = cfg.gpuWarnTemp; $("cfg-gpu-crit").value = cfg.gpuCritTemp;
   $("cfg-unit").value = cfg.unit || "C";
   $("cfg-min").checked = !!cfg.startMinimized;
@@ -576,13 +588,22 @@ function applyCfg() {
   $("cfg-bat-re").value = cfg.batteryRearm ?? 75;
   $("cfg-bat-sound").checked = cfg.batterySound !== false;
   $("cfg-bat-mode").value = cfg.batteryMode === "balloon" ? "balloon" : "popup";
-  $("cfg-auto-upd").checked = !!cfg.autoCheckUpdates;
-  $("ver-info").innerHTML =
+  $("cfg-auto-upd").checked = !!cfg.autoCheckUpdates;  $("ver-info").innerHTML =
     `<div>TempPanel</div><div>${txt(cfg.version)} (WPF + WebView2)</div>` +
-    `<div>Sensores</div><div>LibreHardwareMonitorLib 0.9.5</div>` +
+    `<div>Sensores</div><div>LibreHardwareMonitorLib 0.9.6</div>` +
     `<div>Interfaz</div><div>Microsoft.Web.WebView2 1.0.2903.40 (runtime del sistema)</div>` +
     `<div>.NET</div><div>8.0 autocontenido x64</div>`;
+  $("welcome").classList.toggle("hidden", !cfg.firstRun);
 }
+$("btn-welcome-ok").addEventListener("click", () => {
+  $("welcome").classList.add("hidden");
+  post({ cmd: "setFirstRunDone" });
+});
+$("btn-welcome-help").addEventListener("click", () => {
+  $("welcome").classList.add("hidden");
+  post({ cmd: "setFirstRunDone" });
+  document.querySelector('[data-page="ayuda"]').click();
+});
 $("btn-save-refresh").addEventListener("click", () => {
   const s = Math.min(10, Math.max(1, parseInt($("cfg-refresh").value, 10) || 2));
   post({ cmd: "setRefresh", ms: s * 1000 });

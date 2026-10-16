@@ -43,7 +43,7 @@ const snap = {
     packageTempSource: 'CPU Package (test)', coreTemps: [51.2, 52.0], coreTempNames: ['P-Core #1', 'P-Core #2'],
     totalLoad: 21.4, coreLoads: [20.1, 22.3], coreLoadNames: ['CPU Core #1', 'CPU Core #2'],
     coreClocks: [2400, 2500], power: 12.5, throttling: false,
-    tjMaxNames: [], tjMaxDistances: [], coresPhysical: 10, coresLogical: 16 },
+    tjMaxNames: ['P-Core #1 Distance to TjMax'], tjMaxDistances: [45.7], tjMaxC: 100, coresPhysical: 10, coresLogical: 16 },
   gpu: { name: 'Intel UHD', temp: 48.0, tempSource: 'GPU Temperature (test)', load: 6.5, clock: 1200, memoryUsedMb: null, available: true, note: null },
   memory: { totalMb: 24237, usedMb: 18916, availableMb: 5321, percentUsed: 78.0, source: 'test' },
   battery: { present: true, percent: 67.0, status: 'Cargando', designCapacityMwh: 50000, fullChargeCapacityMwh: 52550,
@@ -74,6 +74,9 @@ const checks = [
   ['gpu temp', get('gpu-cards').includes('48.0')],
   ['sesion gpu', get('gpu-session').includes('45.0')],
   ['diag funcionando', get('diag-info').includes('Funcionando')],
+  ['tjmax visible', get('cpu-head').includes('100')],
+  ['nucleo caliente', get('cpu-session').includes('P2')],
+  ['bienvenida visible', !doc.getElementById('welcome').className.includes('hidden')],
   ['tabla sensor', get('sensor-table').includes('CPU Package')],
   ['banner oculto (54C<85)', doc.getElementById('alert-banner').className.includes('hidden')],
   ['stats historial', get('stats-hist').length > 0]

@@ -37,6 +37,9 @@ public sealed class CpuData
     // Solo se informa si el firmware lo expone; null/vacío = no disponible.
     public List<string> TjMaxNames { get; set; } = new();
     public List<double?> TjMaxDistances { get; set; } = new();
+    // TjMax del procesador, calculado como temp + distancia cuando ambas
+    // lecturas existen para el mismo núcleo (DTS: temp = TjMax - delta).
+    public double? TjMaxC { get; set; }
 }
 
 public sealed class GpuData

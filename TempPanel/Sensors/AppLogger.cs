@@ -75,6 +75,8 @@ public sealed class AppConfig
     public bool StartWithWindows { get; set; } = false;
     // Actualizaciones: comprobación automática desactivada por defecto (sin red salvo permiso).
     public bool AutoCheckUpdates { get; set; } = false;
+    // Bienvenida inicial: true hasta que el usuario la confirma.
+    public bool FirstRun { get; set; } = true;
 
     /// <summary>Garantiza reactivación &lt; alerta y rangos válidos.</summary>
     public void Normalize()
@@ -106,6 +108,7 @@ public sealed class AppConfig
         Unit = fresh.Unit;
         StartWithWindows = fresh.StartWithWindows;
         AutoCheckUpdates = fresh.AutoCheckUpdates;
+        // FirstRun NO se restablece: la bienvenida solo sale una vez.
     }
 
     public static string ConfigPath

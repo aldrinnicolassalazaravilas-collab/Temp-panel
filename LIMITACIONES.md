@@ -2,13 +2,10 @@
 
 Verificadas en Lenovo IdeaPad Slim 3 15IRH10 (i7-13620H, 24 GB, Intel UHD).
 
-1. **Sin temperaturas de CPU (resuelto el misterio, 2026-10-16)**: LHM 0.9.x lee
-   el procesador SOLO mediante el driver **PawnIO** (ya no usa WinRing0). En
-   este equipo PawnIO no está instalado → 0/23 valores con o sin admin, sin
-   bloqueos de Windows. Solución: instalar la edición oficial firmada desde
-   **pawnio.eu** y reabrir la app (ya pide admin sola). Sin desactivar
-   protecciones y sin apps residentes. La página Ayuda lo detecta
-   («Driver PawnIO: NO instalado» / estado `no-pawnio`).
+1. **Temperaturas de CPU (RESUELTO 2026-10-16)**: LHM 0.9.x lee el procesador SOLO
+   mediante el driver **PawnIO** (ya no usa WinRing0). Con PawnIO 2.2.0 instalado
+   + app elevada: 23/23 temperaturas con valor, estado `ok`. Sin PawnIO no hay
+   lecturas con ni sin admin. La app lo detecta y lo explica en Ayuda.
 2. **GPU integrada sin temperatura independiente**: la Intel UHD no publica
    sensor térmico propio. Se muestran carga y frecuencia reales.
 3. **Ventiladores sin RPM / almacenamiento sin sensor**: el EC del IdeaPad no

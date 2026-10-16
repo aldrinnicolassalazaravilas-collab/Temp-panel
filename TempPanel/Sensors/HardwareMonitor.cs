@@ -273,6 +273,7 @@ public sealed class HardwareMonitor : IDisposable
         if (power.HasValue && power.Value > 0) cpu.Power = Math.Round(power.Value, 2);
 
         // Margen térmico por núcleo (fuente fiable: DTS del propio procesador vía LHM)
+        var distByKey = new Dictionary<string, double>();
         foreach (var hw2 in _computer.Hardware.Where(h => h.HardwareType == HardwareType.Cpu))
         {
             foreach (var s in hw2.Sensors)
@@ -280,10 +281,25 @@ public sealed class HardwareMonitor : IDisposable
                 if (s.SensorType != SensorType.Temperature) continue;
                 if (!s.Name.Contains("Distance to TjMax", StringComparison.OrdinalIgnoreCase)) continue;
                 if (!s.Value.HasValue) continue;
+                string key = CoreKey(s.Name);
+                distByKey[key] = s.Value.Value;
                 cpu.TjMaxNames.Add(s.Name);
                 cpu.TjMaxDistances.Add(Math.Round(s.Value.Value, 1));
             }
         }
+        // TjMax = temp + distancia por núcleo; nos quedamos con el máximo coherente.
+        // La resolución del DTS es 1 °C: se muestra con un decimal sin inventar precisión.
+        double? tjmax = null;
+        foreach (var t in coreTempList)
+        {
+            if (distByKey.TryGetValue(CoreKey(t.name), out double d))
+            {
+                double cand = t.v + d;
+                if (cand is >= 60 and <= 130 && (tjmax == null || cand > tjmax))
+                    tjmax = cand;
+            }
+        }
+        if (tjmax.HasValue) cpu.TjMaxC = Math.Round(tjmax.Value, 0);
 
         // Throttling: buscar sensor "Thermal Throttling" si existe
         foreach (var s in cpuHw.Sensors)
@@ -292,6 +308,17 @@ public sealed class HardwareMonitor : IDisposable
             { cpu.Throttling = true; break; }
         }
         return cpu;
+    }
+
+    private static string CoreKey(string name)
+    {
+        string k = name.ToUpperInvariant()
+            .Replace("DISTANCE TO TJMAX", "")
+            .Replace("DISTANCETOTJMAX", "");
+        var sb = new System.Text.StringBuilder();
+        foreach (char c in k)
+            if (char.IsLetterOrDigit(c)) sb.Append(c);
+        return sb.ToString();
     }
 
     // ---------- GPU ----------

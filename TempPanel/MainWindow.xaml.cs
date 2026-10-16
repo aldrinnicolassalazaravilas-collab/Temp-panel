@@ -276,6 +276,11 @@ public partial class MainWindow : Window
                         SendConfig();
                     }
                     break;
+                case "setFirstRunDone":
+                    _config.FirstRun = false;
+                    _config.Save();
+                    SendConfig();
+                    break;
             }
         }
         catch (Exception ex) { AppLogger.Error("WebMessage: " + ex.Message); }
@@ -363,6 +368,7 @@ public partial class MainWindow : Window
                     batteryMode = _config.BatteryMode,
                     batteryFull = _config.BatteryFullEnabled,
                     autoCheckUpdates = _config.AutoCheckUpdates,
+                    firstRun = _config.FirstRun,
                     version = UpdateService.Current().ToString()
                 }
             }, _jsonOpts);

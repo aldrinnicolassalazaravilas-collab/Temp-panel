@@ -18,6 +18,7 @@ public partial class MiniWindow : Window
     private readonly List<double?> _temps = new();
     private readonly List<double?> _bat = new();
     private readonly List<double?> _ram = new();
+    private readonly List<double?> _gpu = new();
     private double _ramTotalMb = 1;
     private const int MaxPoints = 60;
 
@@ -35,6 +36,7 @@ public partial class MiniWindow : Window
         Push(_temps, snap.Cpu.PackageTemp);
         Push(_bat, snap.Battery.Present ? snap.Battery.Percent : null);
         Push(_ram, snap.Memory.UsedMb);
+        Push(_gpu, snap.Gpu.Load);
         if (snap.Memory.TotalMb.HasValue && snap.Memory.TotalMb.Value > 0)
             _ramTotalMb = snap.Memory.TotalMb.Value;
 
@@ -65,6 +67,8 @@ public partial class MiniWindow : Window
             DrawSeries(_bat, 100.0, "#34D399", w, h);
         if (_ram.Any(t => t.HasValue))
             DrawSeries(_ram, _ramTotalMb, "#A78BFA", w, h);
+        if (_gpu.Any(t => t.HasValue))
+            DrawSeries(_gpu, 100.0, "#F472B6", w, h);
     }
 
     private void DrawSeries(List<double?> vals, double? fixedMax, string color, double w, double h)

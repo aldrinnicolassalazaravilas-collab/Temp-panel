@@ -40,7 +40,8 @@
                 <TextBlock Text="●" Foreground="#22D3EE" FontSize="9" Margin="0,0,2,0"/><TextBlock Text="CPU" Foreground="#8B98AD" FontSize="9" Margin="0,0,8,0"/>
                 <TextBlock Text="●" Foreground="#FB923C" FontSize="9" Margin="0,0,2,0"/><TextBlock Text="Temp" Foreground="#8B98AD" FontSize="9" Margin="0,0,8,0"/>
                 <TextBlock Text="●" Foreground="#34D399" FontSize="9" Margin="0,0,2,0"/><TextBlock Text="Bat" Foreground="#8B98AD" FontSize="9" Margin="0,0,8,0"/>
-                <TextBlock Text="●" Foreground="#A78BFA" FontSize="9" Margin="0,0,2,0"/><TextBlock Text="RAM" Foreground="#8B98AD" FontSize="9"/>
+                <TextBlock Text="●" Foreground="#A78BFA" FontSize="9" Margin="0,0,2,0"/><TextBlock Text="RAM" Foreground="#8B98AD" FontSize="9" Margin="0,0,8,0"/>
+                <TextBlock Text="●" Foreground="#F472B6" FontSize="9" Margin="0,0,2,0"/><TextBlock Text="GPU" Foreground="#8B98AD" FontSize="9"/>
             </StackPanel>
         </Grid>
     </Border>
