@@ -86,6 +86,8 @@ public static class UpdateService
     }
 
     /// <summary>Descarga el instalador a %TEMP% y lo lanza. El llamador cierra la app.</summary>
+    public static string? LastDownloadedPath { get; private set; }
+
     public static async Task<string?> DownloadAndLaunchAsync(string url, string tag)
     {
         string? dest = null;
@@ -107,29 +109,60 @@ public static class UpdateService
                 Sensors.AppLogger.Error("Update download: archivo demasiado pequeño, posible descarga corrupta.");
                 return null;
             }
-            // El antivirus suele escanear el exe nuevo unos segundos y lo bloquea;
-            // reintenta el lanzamiento con pausas en lugar de fallar a la primera.
-            for (int i = 0; i < 6; i++)
-            {
-                try
-                {
-                    Process.Start(new ProcessStartInfo(dest) { UseShellExecute = true });
-                    return dest;
-                }
-                catch (Exception ex) when (i < 5)
-                {
-                    Sensors.AppLogger.Info($"Update launch reintento {i + 1}: " + ex.Message);
-                    await Task.Delay(2000);
-                }
-            }
-            Sensors.AppLogger.Error("Update download: no se pudo abrir el instalador tras 6 intentos: " + dest);
-            return null;
+            Unblock(dest);
+            LastDownloadedPath = dest;
+            return await LaunchWithRetriesAsync(dest) ? dest : null;
         }
         catch (Exception ex)
         {
             Sensors.AppLogger.Error("Update download: " + ex.Message);
             return null;
         }
+    }
+
+    /// <summary>Quita la marca de web (MOTW) para menos fricción con SmartScreen.</summary>
+    public static void Unblock(string path)
+    {
+        try { File.Delete(path + ":Zone.Identifier"); }
+        catch { }
+    }
+
+    /// <summary>Reintenta abrir un instalador ya descargado (botón Reintentar).</summary>
+    public static async Task<bool> RetryLaunchAsync()
+    {
+        try
+        {
+            string? path = LastDownloadedPath;
+            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return false;
+            Unblock(path);
+            return await LaunchWithRetriesAsync(path);
+        }
+        catch (Exception ex)
+        {
+            Sensors.AppLogger.Error("Update retry: " + ex.Message);
+            return false;
+        }
+    }
+
+    private static async Task<bool> LaunchWithRetriesAsync(string dest)
+    {
+        // El antivirus suele escanear el exe nuevo y lo bloquea unos segundos;
+        // reintenta con pausas en lugar de fallar a la primera (10 x 3 s).
+        for (int i = 0; i < 10; i++)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(dest) { UseShellExecute = true });
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Sensors.AppLogger.Info($"Update launch reintento {i + 1}: " + ex.Message);
+                if (i < 9) await Task.Delay(3000);
+            }
+        }
+        Sensors.AppLogger.Error("Update download: no se pudo abrir el instalador tras 10 intentos: " + dest);
+        return false;
     }
 
     public static Version? ParseTag(string tag)

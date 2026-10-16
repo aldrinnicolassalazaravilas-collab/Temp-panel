@@ -267,6 +267,7 @@ public partial class MainWindow : Window
                         doc.RootElement.TryGetProperty("tag", out var tagEl))
                         _ = DownloadUpdateAsync(urlEl.GetString() ?? "", tagEl.GetString() ?? "");
                     break;
+                case "retryLaunch": _ = RetryLaunchAsync(); break;
                 case "setAutoUpdates":
                     if (doc.RootElement.TryGetProperty("value", out var auEl))
                     {
@@ -560,6 +561,22 @@ public partial class MainWindow : Window
         {
             AppLogger.Error("DownloadUpdate: " + ex.Message);
             SendUpdateStatus("error", null);
+        }
+    }
+
+    private async Task RetryLaunchAsync()
+    {
+        try
+        {
+            SendUpdateStatus("downloading", null);
+            bool ok = await UpdateService.RetryLaunchAsync();
+            if (ok) ExitApp();
+            else SendUpdateStatus("dlerror", null);
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Error("RetryLaunch: " + ex.Message);
+            SendUpdateStatus("dlerror", null);
         }
     }
 

@@ -75,6 +75,12 @@ public sealed class UpdateServiceTests
     }
 
     [Fact]
+    public void Unblock_Missing_File_Does_Not_Throw()
+    {
+        TempPanel.Services.UpdateService.Unblock(@"C:\no-existe-xyz\a.exe");
+    }
+
+    [Fact]
     public void StartupTask_Args_Use_Highest_RunLevel()
     {
         string args = TempPanel.Services.StartupManager.BuildCreateArgs(@"C:\App\TempPanel.exe");

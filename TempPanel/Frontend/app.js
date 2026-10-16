@@ -8,7 +8,7 @@ const txt = (v) => (v === null || v === undefined || v === "") ? "No disponible"
 let lastSnap = null;
 let cfg = { refreshMs: 2000, cpuWarnTemp: 85, cpuCritTemp: 95, gpuWarnTemp: 80, gpuCritTemp: 90, preferredCpuSensor: "auto",
   unit: "C", startMinimized: false, startWithWindows: false,
-  batteryEnabled: true, batteryThreshold: 80, batteryRearm: 75, batterySound: true, batteryMode: "popup", batteryFull: true, version: "1.3.2", autoCheckUpdates: false };
+  batteryEnabled: true, batteryThreshold: 80, batteryRearm: 75, batterySound: true, batteryMode: "popup", batteryFull: true, version: "1.3.3", autoCheckUpdates: false };
 let paused = false;
 let history = []; // {t, cpuTemp(C), cpuLoad, ramUsed, gpuTemp(C), batPct}
 const MAXH = 900; // 30 min a 2 s
@@ -90,8 +90,8 @@ function onMsg(m) {
 }
 let pendingUpdate = null;
 function onUpdate(d) {
-  const st = $("upd-status"), dl = $("btn-dl-upd");
-  pendingUpdate = null; dl.style.display = "none";
+  const st = $("upd-status"), dl = $("btn-dl-upd"), rt = $("btn-retry-upd");
+  pendingUpdate = null; dl.style.display = "none"; rt.style.display = "none";
   if (d.state === "checking") st.textContent = "Comprobando…";
   else if (d.state === "uptodate") st.textContent = `Estás al día (v${d.current}).`;
   else if (d.state === "noreleases") st.textContent = "No se encontraron versiones (¿repo privado o aún sin publicar?).";
@@ -101,7 +101,10 @@ function onUpdate(d) {
     dl.style.display = "";
   }
   else if (d.state === "downloading") st.textContent = "Descargando instalador… se abrirá solo; la app se cerrará.";
-  else if (d.state === "dlerror") st.textContent = "Se descargó pero no se pudo abrir el instalador (quizá el antivirus lo está revisando). Busca TempPanel-Setup-*.exe en tu carpeta temporal y ábrelo a mano pasados unos segundos.";
+  else if (d.state === "dlerror") {
+    st.textContent = "Se descargó pero no se pudo abrir el instalador (quizá el antivirus lo está revisando). Espera unos segundos y pulsa Reintentar, o ábrelo a mano desde tu carpeta temporal.";
+    rt.style.display = "";
+  }
   else if (d.state === "error") st.textContent = "No se pudo comprobar (¿sin Internet o sin releases?).";
 }
 function setConn(cls, text) {
@@ -621,6 +624,7 @@ $("btn-dl-upd").addEventListener("click", () => {
   if (confirm(`Se descargará TempPanel ${pendingUpdate.latest} y se abrirá su instalador. ¿Continuar?`))
     post({ cmd: "downloadUpdate", url: pendingUpdate.url, tag: pendingUpdate.latest });
 });
+$("btn-retry-upd").addEventListener("click", () => post({ cmd: "retryLaunch" }));
 $("cfg-auto-upd").addEventListener("change", () => post({ cmd: "setAutoUpdates", value: $("cfg-auto-upd").checked }));
 $("btn-hvci-off").addEventListener("click", () => {
   if (confirm("Se desactivará la integridad de memoria (baja la protección contra malware avanzado) y hará falta reiniciar. ¿Continuar?"))
