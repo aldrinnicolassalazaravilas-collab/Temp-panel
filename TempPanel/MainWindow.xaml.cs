@@ -15,10 +15,13 @@ namespace TempPanel;
 /// </summary>
 public partial class MainWindow : Window
 {
-    private readonly HardwareMonitor _monitor;
+    private HardwareMonitor _monitor;
+    private readonly object _monLock = new();
     private readonly AppConfig _config;
     private readonly System.Threading.Timer _sensorTimer;
     private readonly System.Threading.Timer _batteryTimer;
+    private readonly System.Threading.Timer _recycleTimer;
+    private bool _everHadCpuTemp;
     private readonly BatteryAlertService _batteryService;
     private readonly BatteryAlertService _fullService;
     private readonly Notifier _notifier;
@@ -66,6 +69,10 @@ public partial class MainWindow : Window
 
         _sensorTimer = new System.Threading.Timer(_ => PushSnapshot(), null, Timeout.Infinite, Timeout.Infinite);
         _batteryTimer = new System.Threading.Timer(_ => CheckBattery(), null, Timeout.Infinite, Timeout.Infinite);
+        // Si como admin nunca hubo temperaturas (p. ej. antivirus retiró el
+        // driver a mitad de sesión y luego se permitió), reintenta desplegar
+        // cada 10 minutos recreando el lector. Barato y honesto.
+        _recycleTimer = new System.Threading.Timer(_ => MaybeRecycleMonitor(), null, Timeout.Infinite, Timeout.Infinite);
 
         Loaded += async (_, __) => await InitWebAsync();
         Closing += OnClosingWindow;
@@ -104,6 +111,7 @@ public partial class MainWindow : Window
                 SendConfig();
                 _sensorTimer.Change(0, _config.RefreshMs);
                 _batteryTimer.Change(TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
+                _recycleTimer.Change(TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(10));
                 if (_config.AutoCheckUpdates) _ = CheckUpdatesAsync(manual: false);
             };
             Web.Source = new Uri("https://temppanel.local/index.html");
@@ -284,7 +292,9 @@ public partial class MainWindow : Window
         if (!_webReady) return;
         try
         {
-            var snap = _monitor.GetSnapshot();
+            Sensors.Snapshot snap;
+            lock (_monLock) snap = _monitor.GetSnapshot();
+            if (snap.Cpu.PackageTemp.HasValue) _everHadCpuTemp = true;
             string json = JsonSerializer.Serialize(new { type = "snapshot", data = snap }, _jsonOpts);
             Dispatcher.BeginInvoke(() =>
             {
@@ -347,6 +357,26 @@ public partial class MainWindow : Window
             _tray.Text = tip;
         }
         catch { }
+    }
+
+    private void MaybeRecycleMonitor()
+    {
+        try
+        {
+            if (_everHadCpuTemp) return;
+            if (!HardwareMonitor.IsRunningAsAdmin()) return;
+            AppLogger.Info("Reciclando lector de sensores para reintentar despliegue del driver.");
+            lock (_monLock)
+            {
+                try { _monitor.Dispose(); } catch { }
+                _monitor = new HardwareMonitor
+                {
+                    RefreshMs = _config.RefreshMs,
+                    PreferredCpuSensor = _config.PreferredCpuSensor
+                };
+            }
+        }
+        catch (Exception ex) { AppLogger.Error("MaybeRecycle: " + ex.Message); }
     }
 
     // ---------------- Batería (cada 15 s) ----------------
@@ -532,6 +562,7 @@ public partial class MainWindow : Window
     {
         try { _sensorTimer.Dispose(); } catch { }
         try { _batteryTimer.Dispose(); } catch { }
+        try { _recycleTimer.Dispose(); } catch { }
         try { _monitor.Dispose(); } catch { }
         try
         {

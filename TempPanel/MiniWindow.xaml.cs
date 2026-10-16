@@ -16,6 +16,9 @@ public partial class MiniWindow : Window
     private readonly Action _onRestore;
     private readonly List<double?> _loads = new();
     private readonly List<double?> _temps = new();
+    private readonly List<double?> _bat = new();
+    private readonly List<double?> _ram = new();
+    private double _ramTotalMb = 1;
     private const int MaxPoints = 60;
 
     public MiniWindow(Action onRestore)
@@ -30,6 +33,10 @@ public partial class MiniWindow : Window
     {
         Push(_loads, snap.Cpu.TotalLoad);
         Push(_temps, snap.Cpu.PackageTemp);
+        Push(_bat, snap.Battery.Present ? snap.Battery.Percent : null);
+        Push(_ram, snap.Memory.UsedMb);
+        if (snap.Memory.TotalMb.HasValue && snap.Memory.TotalMb.Value > 0)
+            _ramTotalMb = snap.Memory.TotalMb.Value;
 
         TempText.Text = snap.Cpu.PackageTemp.HasValue
             ? $"{snap.Cpu.PackageTemp.Value:0.0} °C" : "— °C";
@@ -54,6 +61,10 @@ public partial class MiniWindow : Window
         DrawSeries(_loads, 100.0, "#22D3EE", w, h);
         if (_temps.Any(t => t.HasValue))
             DrawSeries(_temps, null, "#FB923C", w, h);
+        if (_bat.Any(t => t.HasValue))
+            DrawSeries(_bat, 100.0, "#34D399", w, h);
+        if (_ram.Any(t => t.HasValue))
+            DrawSeries(_ram, _ramTotalMb, "#A78BFA", w, h);
     }
 
     private void DrawSeries(List<double?> vals, double? fixedMax, string color, double w, double h)
