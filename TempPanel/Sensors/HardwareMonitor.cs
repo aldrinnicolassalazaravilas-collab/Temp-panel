@@ -124,6 +124,7 @@ public sealed class HardwareMonitor : IDisposable
         lock (_lock)
         {
             EnsureStaticInfo();
+            EnsurePawnIoStatus();
             var snap = new Snapshot();
             var warnings = new List<string>();
             try
@@ -607,7 +608,9 @@ public sealed class HardwareMonitor : IDisposable
             CpuTempWithValue = cpuWith,
             TotalSensors = snap.AllSensors.Count,
             SensorsWithValue = snap.AllSensors.Count(s => s.Value.HasValue),
-            DriverBlocked = CheckDriverBlocked()
+            DriverBlocked = CheckDriverBlocked(),
+            PawnIoInstalled = _pawnIoInstalled.GetValueOrDefault(),
+            PawnIoVersion = _pawnIoVersion
         };
         diag.DriverState = ResolveDriverState(diag);
         return diag;
@@ -637,11 +640,46 @@ public sealed class HardwareMonitor : IDisposable
     private bool? _driverBlockedCache;
     private DateTime _driverBlockedAt;
     private string _driverStateCache = "unknown";
+    private static bool? _pawnIoInstalled;
+    private static string? _pawnIoVersion;
+
+    /// <summary>
+    /// Detecta el driver PawnIO (el que LHM 0.9.x usa para leer MSR) igual que
+    /// la propia librería: clave de desinstalación en ambas vistas del registro.
+    /// Sin este driver instalado no hay temperaturas, con o sin admin.
+    /// </summary>
+    private static void EnsurePawnIoStatus()
+    {
+        if (_pawnIoInstalled.HasValue) return;
+        _pawnIoInstalled = false;
+        try
+        {
+            using var k1 = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+                @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO", false);
+            string? v = k1?.GetValue("DisplayVersion") as string;
+            if (string.IsNullOrWhiteSpace(v))
+            {
+                using var b64 = Microsoft.Win32.RegistryKey.OpenBaseKey(
+                    Microsoft.Win32.RegistryHive.LocalMachine,
+                    Microsoft.Win32.RegistryView.Registry64);
+                using var k2 = b64.OpenSubKey(
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO", false);
+                v = k2?.GetValue("DisplayVersion") as string;
+            }
+            if (!string.IsNullOrWhiteSpace(v))
+            {
+                _pawnIoInstalled = true;
+                _pawnIoVersion = v!.Trim();
+            }
+        }
+        catch (Exception ex) { AppLogger.Error("PawnIO detect: " + ex.Message); }
+    }
 
     /// <summary>
     /// Clasifica el acceso al driver: ok (hay lecturas), noadmin (sin intentar),
-    /// blocked (Windows lo frenó), loaded-noread (cargado pero sin valores),
-    /// not-deployed (ni se desplegó), unknown. Con caché de 10 minutos.
+    /// no-pawnio (falta instalar el driver PawnIO), blocked (Windows lo frenó),
+    /// loaded-noread (cargado pero sin valores), not-deployed, unknown.
+    /// Con caché de 10 minutos.
     /// </summary>
     private string ResolveDriverState(DetectionDiagnostics diag)
     {
@@ -649,6 +687,8 @@ public sealed class HardwareMonitor : IDisposable
         {
             if (diag.CpuTempWithValue > 0) return "ok";
             if (!diag.IsAdmin) return "noadmin";
+            if (!_pawnIoInstalled.GetValueOrDefault())
+                return "no-pawnio";
             if (DateTime.Now - _driverBlockedAt < TimeSpan.FromMinutes(10) && _driverStateCache != "unknown")
                 return _driverStateCache;
             string state;

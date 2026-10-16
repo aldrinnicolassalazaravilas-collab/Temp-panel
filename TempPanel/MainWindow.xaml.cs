@@ -93,7 +93,8 @@ public partial class MainWindow : Window
         {
             string userData = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "TempPanel", "WebView2");
+                "TempPanel", "WebView2",
+                UpdateService.Current().ToString()); // perfil por versión: evita bloqueos de perfiles viejos
             Directory.CreateDirectory(userData);
             var env = await CoreWebView2Environment.CreateAsync(null, userData);
             await Web.EnsureCoreWebView2Async(env);
@@ -102,11 +103,29 @@ public partial class MainWindow : Window
             Web.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
 
             string wwwroot = FindWwwRoot();
+            if (!File.Exists(Path.Combine(wwwroot, "index.html")))
+            {
+                AppLogger.Error("Frontend no encontrado en: " + wwwroot);
+                System.Windows.MessageBox.Show("No se encontró la interfaz en:\n" + wwwroot +
+                    "\n\nReinstala TempPanel.", "TempPanel",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
             Web.CoreWebView2.SetVirtualHostNameToFolderMapping(
                 "temppanel.local", wwwroot, CoreWebView2HostResourceAccessKind.Allow);
             Web.CoreWebView2.WebMessageReceived += OnWebMessage;
-            Web.NavigationCompleted += (_, __) =>
+            Web.NavigationCompleted += (_, nav) =>
             {
+                if (!nav.IsSuccess)
+                {
+                    AppLogger.Error($"Navegación fallida: {nav.HttpStatusCode} ({nav.WebErrorStatus})");
+                    System.Windows.MessageBox.Show(
+                        "No se pudo cargar la interfaz.\n\n" +
+                        $"Error: {nav.WebErrorStatus} (HTTP {nav.HttpStatusCode}).\n" +
+                        "Cierra la app, borra %LocalAppData%\\TempPanel\\WebView2 e inténtalo de nuevo.",
+                        "TempPanel", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
                 _webReady = true;
                 SendConfig();
                 _sensorTimer.Change(0, _config.RefreshMs);

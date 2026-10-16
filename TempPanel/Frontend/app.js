@@ -8,7 +8,7 @@ const txt = (v) => (v === null || v === undefined || v === "") ? "No disponible"
 let lastSnap = null;
 let cfg = { refreshMs: 2000, cpuWarnTemp: 85, cpuCritTemp: 95, gpuWarnTemp: 80, gpuCritTemp: 90, preferredCpuSensor: "auto",
   unit: "C", startMinimized: false, startWithWindows: false,
-  batteryEnabled: true, batteryThreshold: 80, batteryRearm: 75, batterySound: true, batteryMode: "popup", batteryFull: true, version: "1.3.0", autoCheckUpdates: false };
+  batteryEnabled: true, batteryThreshold: 80, batteryRearm: 75, batterySound: true, batteryMode: "popup", batteryFull: true, version: "1.3.2", autoCheckUpdates: false };
 let paused = false;
 let history = []; // {t, cpuTemp(C), cpuLoad, ramUsed, gpuTemp(C), batPct}
 const MAXH = 900; // 30 min a 2 s
@@ -191,17 +191,19 @@ function renderAll(s) {
       : d.driverBlocked === false ? "No se encontraron bloqueos"
       : "No comprobable sin administrador";
     const stateTxt = { ok: "Funcionando (hay lecturas)", noadmin: "Sin intentar (falta administrador)",
-      blocked: "Bloqueado por Windows", "loaded-noread": "Cargado pero sin lecturas",
+      "no-pawnio": "Falta el driver PawnIO", blocked: "Bloqueado por Windows", "loaded-noread": "Cargado pero sin lecturas",
       "not-deployed": "Ni se desplegó", unknown: "Desconocido" }[(d.driverState || "unknown")] || "Desconocido";
     dg.innerHTML =
       `<div>Permisos</div><div>${d.isAdmin ? "Administrador" : "Usuario estándar"}</div>` +
       `<div>Integridad de memoria</div><div>${d.hvciEnabled ? "Activada (bloquea el driver de temperatura)" : "Desactivada"}</div>` +
       `<div>Driver bloqueado</div><div>${drv}</div>` +
+      `<div>Driver PawnIO</div><div>${d.pawnIoInstalled ? "Instalado" + (d.pawnIoVersion ? " (v" + d.pawnIoVersion + ")" : "") : "NO instalado"}</div>` +
       `<div>Estado del driver</div><div>${stateTxt}</div>` +
       `<div>Temps. CPU con valor</div><div>${d.cpuTempWithValue} de ${d.cpuTempSensors}</div>` +
       `<div>Sensores con valor</div><div>${d.sensorsWithValue} de ${d.totalSensors}</div>`;
     if (da) {
       if (d.cpuTempWithValue > 0) da.textContent = "El equipo publica temperaturas de CPU: las verás en la sección CPU.";
+      else if (d.driverState === "no-pawnio" || !d.pawnIoInstalled) da.textContent = "Falta el driver PawnIO (el que usa la librería para leer el procesador). Instala la edición oficial firmada desde pawnio.eu, reabre la app y listo. No hay que desactivar protecciones ni dejar apps abiertas.";
       else if (d.driverState === "blocked") da.textContent = "Confirmado: Windows bloqueó el controlador de lectura. Para ver temperaturas, desactiva la integridad de memoria y reinicia (o mantenla y usa el resto de sensores).";
       else if (d.driverState === "loaded-noread") da.textContent = "El driver carga pero no obtiene valores: posible incompatibilidad con este firmware. Repórtalo con el botón de registros.";
       else if (d.driverState === "not-deployed") da.textContent = "El driver ni se desplegó aun como administrador: lo más probable es que el antivirus lo pusiera en cuarentena al extraerse. Mira Seguridad de Windows → Historial de protección → busca WinRing0, restaúralo o exclúyelo, y reabre como admin.";

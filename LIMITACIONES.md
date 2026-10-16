@@ -2,12 +2,13 @@
 
 Verificadas en Lenovo IdeaPad Slim 3 15IRH10 (i7-13620H, 24 GB, Intel UHD).
 
-1. **Temperaturas de CPU nulas incluso como administrador (verificado en esta
-   unidad)**: con HVCI/integridad de memoria activada (valor 1 en
-   `HypervisorEnforcedCodeIntegrity`, comprobado en este equipo), Windows bloquea
-   el driver Ring0 de LibreHardwareMonitor y los valores DTS quedan nulos aun
-   elevados. Afecta a cualquier monitor por este método. Ver `TUTORIAL.md`
-   (Opción A: mantener la protección; Opción B: desactivarla + reiniciar).
+1. **Sin temperaturas de CPU (resuelto el misterio, 2026-10-16)**: LHM 0.9.x lee
+   el procesador SOLO mediante el driver **PawnIO** (ya no usa WinRing0). En
+   este equipo PawnIO no está instalado → 0/23 valores con o sin admin, sin
+   bloqueos de Windows. Solución: instalar la edición oficial firmada desde
+   **pawnio.eu** y reabrir la app (ya pide admin sola). Sin desactivar
+   protecciones y sin apps residentes. La página Ayuda lo detecta
+   («Driver PawnIO: NO instalado» / estado `no-pawnio`).
 2. **GPU integrada sin temperatura independiente**: la Intel UHD no publica
    sensor térmico propio. Se muestran carga y frecuencia reales.
 3. **Ventiladores sin RPM / almacenamiento sin sensor**: el EC del IdeaPad no

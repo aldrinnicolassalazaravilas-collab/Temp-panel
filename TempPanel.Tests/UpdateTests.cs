@@ -75,6 +75,17 @@ public sealed class UpdateServiceTests
     }
 
     [Fact]
+    public void StartupTask_Args_Use_Highest_RunLevel()
+    {
+        string args = TempPanel.Services.StartupManager.BuildCreateArgs(@"C:\App\TempPanel.exe");
+        Assert.Contains("/SC ONLOGON", args);
+        Assert.Contains("/RL HIGHEST", args);
+        Assert.Contains("TempPanel", args);
+        Assert.Contains(@"C:\App\TempPanel.exe", args);
+        Assert.Equal("/Delete /TN \"TempPanel\" /F", TempPanel.Services.StartupManager.BuildDeleteArgs());
+    }
+
+    [Fact]
     public void FullAlert_Fires_Once_At_99_Charging()
     {
         var svc = new BatteryAlertService(new BatteryAlertOptions

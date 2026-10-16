@@ -77,9 +77,12 @@ public sealed class DetectionDiagnostics
     // true = Windows bloqueó el driver (verificado en el registro de eventos);
     // false = sin bloqueos; null = no se pudo comprobar (p. ej. sin admin).
     public bool? DriverBlocked { get; set; }
-    // Estado del driver de bajo nivel: ok | noadmin | blocked | loaded-noread |
-    // not-deployed | unknown. Ver BuildDiagnostics.
+    // Estado del driver de bajo nivel: ok | noadmin | no-pawnio | blocked |
+    // loaded-noread | not-deployed | unknown. Ver BuildDiagnostics.
     public string DriverState { get; set; } = "unknown";
+    // Driver PawnIO (el que usa LHM 0.9.x para leer MSR): instalado o no.
+    public bool PawnIoInstalled { get; set; }
+    public string? PawnIoVersion { get; set; }
 }
 
 public sealed class BatteryData
