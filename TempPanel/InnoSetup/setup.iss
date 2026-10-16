@@ -2,7 +2,7 @@
 ; Requiere: publish self-contained en ..\publish\win-x64
 
 #define MyAppName "TempPanel"
-#define MyAppVersion "1.3.4"
+#define MyAppVersion "1.3.5"
 #define MyAppPublisher "TempPanel"
 #define MyAppURL "https://github.com/temppanel/temppanel"
 #define MyAppExeName "TempPanel.exe"
@@ -52,7 +52,7 @@ Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent shellexec
 
 [UninstallDelete]
 ; Limpia solo caché WebView2 local de TempPanel (los ajustes del usuario se conservan a propósito

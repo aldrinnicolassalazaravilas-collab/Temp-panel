@@ -8,7 +8,7 @@ const txt = (v) => (v === null || v === undefined || v === "") ? "No disponible"
 let lastSnap = null;
 let cfg = { refreshMs: 2000, cpuWarnTemp: 85, cpuCritTemp: 95, gpuWarnTemp: 80, gpuCritTemp: 90, preferredCpuSensor: "auto",
   unit: "C", startMinimized: false, startWithWindows: false,
-  batteryEnabled: true, batteryThreshold: 80, batteryRearm: 75, batterySound: true, batteryMode: "popup", batteryFull: true, version: "1.3.4", autoCheckUpdates: false, firstRun: true };
+  batteryEnabled: true, batteryThreshold: 80, batteryRearm: 75, batterySound: true, batteryMode: "popup", batteryFull: true, version: "1.3.5", autoCheckUpdates: false, firstRun: true };
 let paused = false;
 let history = []; // {t, cpuTemp(C), cpuLoad, ramUsed, gpuTemp(C), batPct}
 const MAXH = 900; // 30 min a 2 s
