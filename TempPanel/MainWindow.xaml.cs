@@ -223,6 +223,17 @@ public partial class MainWindow : Window
                     break;
                 case "restartAdmin": RestartAsAdmin(); break;
                 case "openMini": OpenMini(); break;
+                case "setHvci":
+                    if (doc.RootElement.TryGetProperty("enabled", out var hvEl))
+                        _ = ApplyHvciAsync(hvEl.GetBoolean());
+                    break;
+                case "rebootNow":
+                    try
+                    {
+                        Process.Start(new ProcessStartInfo("shutdown", "/r /t 15 /c \"Reinicio solicitado por TempPanel\"") { UseShellExecute = false, CreateNoWindow = true });
+                    }
+                    catch (Exception ex) { AppLogger.Error("reboot: " + ex.Message); }
+                    break;
                 case "openLogs":
                     try
                     {
@@ -445,6 +456,28 @@ public partial class MainWindow : Window
             _tray.ShowBalloonTip(10000);
         }
         catch (Exception ex) { AppLogger.Error("Balloon: " + ex.Message); }
+    }
+
+    private async Task ApplyHvciAsync(bool enable)
+    {
+        await Task.Run(() =>
+        {
+            var result = HvciManager.SetEnabled(enable);
+            string json = JsonSerializer.Serialize(new
+            {
+                type = "hvciStatus",
+                data = new
+                {
+                    enabled = HvciManager.IsEnabled(),
+                    result = result.ToString()
+                }
+            }, _jsonOpts);
+            Dispatcher.BeginInvoke(() =>
+            {
+                try { Web.CoreWebView2?.PostWebMessageAsJson(json); }
+                catch { }
+            });
+        });
     }
 
     // ---------------- Actualizaciones ----------------

@@ -4,8 +4,9 @@
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
     <security>
       <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
-        <!-- Mínimos privilegios: no pedir admin por defecto -->
-        <requestedExecutionLevel level="asInvoker" uiAccess="false" />
+        <!-- TempPanel necesita elevación al arrancar para leer sensores de bajo nivel.
+             Autorizado por el usuario: sin admin no hay temperaturas en este equipo. -->
+        <requestedExecutionLevel level="requireAdministrator" uiAccess="false" />
       </requestedPrivileges>
     </security>
   </trustInfo>

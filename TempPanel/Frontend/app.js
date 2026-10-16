@@ -8,7 +8,7 @@ const txt = (v) => (v === null || v === undefined || v === "") ? "No disponible"
 let lastSnap = null;
 let cfg = { refreshMs: 2000, cpuWarnTemp: 85, cpuCritTemp: 95, gpuWarnTemp: 80, gpuCritTemp: 90, preferredCpuSensor: "auto",
   unit: "C", startMinimized: false, startWithWindows: false,
-  batteryEnabled: true, batteryThreshold: 80, batteryRearm: 75, batterySound: true, batteryMode: "popup", batteryFull: true, version: "1.2.10", autoCheckUpdates: false };
+  batteryEnabled: true, batteryThreshold: 80, batteryRearm: 75, batterySound: true, batteryMode: "popup", batteryFull: true, version: "1.3.0", autoCheckUpdates: false };
 let paused = false;
 let history = []; // {t, cpuTemp(C), cpuLoad, ramUsed, gpuTemp(C), batPct}
 const MAXH = 900; // 30 min a 2 s
@@ -80,6 +80,13 @@ function onMsg(m) {
   if (m.type === "config") { cfg = Object.assign(cfg, m.data || {}); applyCfg(); }
   if (m.type === "snapshot") onSnapshot(m.data);
   if (m.type === "updateStatus") onUpdate(m.data);
+  if (m.type === "hvciStatus") {
+    const d = m.data || {};
+    $("hvci-status").textContent = d.result === "Ok"
+      ? `Integridad de memoria: ${d.enabled ? "ACTIVADA" : "DESACTIVADA"}. Reinicia el equipo para que surta efecto.`
+      : d.result === "NoAdmin" ? "Sin permisos de administrador: reabre la app como admin."
+      : "No se pudo cambiar. Mira el registro de errores.";
+  }
 }
 let pendingUpdate = null;
 function onUpdate(d) {
@@ -613,4 +620,12 @@ $("btn-dl-upd").addEventListener("click", () => {
     post({ cmd: "downloadUpdate", url: pendingUpdate.url, tag: pendingUpdate.latest });
 });
 $("cfg-auto-upd").addEventListener("change", () => post({ cmd: "setAutoUpdates", value: $("cfg-auto-upd").checked }));
+$("btn-hvci-off").addEventListener("click", () => {
+  if (confirm("Se desactivará la integridad de memoria (baja la protección contra malware avanzado) y hará falta reiniciar. ¿Continuar?"))
+    post({ cmd: "setHvci", enabled: false });
+});
+$("btn-hvci-on").addEventListener("click", () => post({ cmd: "setHvci", enabled: true }));
+$("btn-reboot").addEventListener("click", () => {
+  if (confirm("El equipo se reiniciará en 15 segundos. ¿Continuar?")) post({ cmd: "rebootNow" });
+});
 applyCfg();

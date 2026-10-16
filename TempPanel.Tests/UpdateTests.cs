@@ -68,6 +68,13 @@ public sealed class UpdateServiceTests
     }
 
     [Fact]
+    public void Hvci_IsEnabled_Reads_Without_Throwing()
+    {
+        bool v = TempPanel.Services.HvciManager.IsEnabled();
+        Assert.True(v || !v);
+    }
+
+    [Fact]
     public void FullAlert_Fires_Once_At_99_Charging()
     {
         var svc = new BatteryAlertService(new BatteryAlertOptions

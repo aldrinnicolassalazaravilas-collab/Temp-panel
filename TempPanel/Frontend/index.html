@@ -200,6 +200,16 @@
         <div id="diag-advice" class="muted" style="margin-top:8px"></div>
       </div>
       <div class="card">
+        <h3>Integridad de memoria (HVCI)</h3>
+        <div class="muted">Si está activada, bloquea el driver de temperaturas. Cambiarla requiere reiniciar el equipo.</div>
+        <div class="toolbar" style="margin-top:8px">
+          <button id="btn-hvci-off" class="btn">Desactivar y poder ver temperaturas</button>
+          <button id="btn-hvci-on" class="btn ghost">Reactivar protección</button>
+          <button id="btn-reboot" class="btn ghost">Reiniciar ahora</button>
+        </div>
+        <div id="hvci-status" class="muted small"></div>
+      </div>
+      <div class="card">
         <h3>Qué significan los estados</h3>
         <div class="kv">
           <div>Valor con número</div><div>Lectura real del equipo en ese momento.</div>

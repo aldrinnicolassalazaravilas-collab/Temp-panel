@@ -13,6 +13,9 @@ cargas, memoria, batería y ventiladores de tu portátil en una interfaz moderna
 No necesitas instalar .NET (autocontenida) ni abrir PowerShell o VS Code.
 Si falta WebView2, el instalador te muestra el enlace oficial de Microsoft.
 
+> Desde la v1.3.0 TempPanel pide elevación al arrancar (autorizado por el
+> usuario): sin permisos de administrador no hay temperaturas en este equipo.
+
 ## Qué verás
 
 - **Resumen**: CPU, carga, RAM y batería de un vistazo + gráficas.
