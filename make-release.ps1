@@ -1,6 +1,6 @@
-# Crea el Release v1.1.1 en GitHub y sube el instalador como asset.
+# Crea el Release v2.3.5 en GitHub y sube el instalador como asset.
 # Usa la credencial ya guardada en el equipo (no pide ni muestra secretos).
-# Ejecutar cuando dist\TempPanel-Setup-x64.exe sea el build v1.1.1 final.
+# Ejecutar cuando dist\TempPanel-Setup-x64.exe sea el build v2.3.5 final.
 $ErrorActionPreference = "Stop"
 
 $owner = "aldrinnicolassalazaravilas-collab"
