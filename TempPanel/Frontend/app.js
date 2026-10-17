@@ -8,7 +8,7 @@ const txt = (v) => (v === null || v === undefined || v === "") ? "No disponible"
 let lastSnap = null;
 let cfg = { refreshMs: 2000, cpuWarnTemp: 85, cpuCritTemp: 95, gpuWarnTemp: 80, gpuCritTemp: 90, preferredCpuSensor: "auto",
   unit: "C", startMinimized: false, startWithWindows: false,
-  batteryEnabled: true, batteryThreshold: 80, batteryRearm: 75, batterySound: true, batteryMode: "popup", batteryFull: true, version: "1.3.5", autoCheckUpdates: false, firstRun: true };
+  batteryEnabled: true, batteryThreshold: 80, batteryRearm: 75, batterySound: true, batteryMode: "popup", batteryFull: true, version: "2.3.5", autoCheckUpdates: false, firstRun: true, miniSeries: "cpu,temp,bat,ram,gpu", miniExpanded: false };
 let paused = false;
 let history = []; // {t, cpuTemp(C), cpuLoad, ramUsed, gpuTemp(C), batPct}
 const MAXH = 900; // 30 min a 2 s
@@ -39,6 +39,7 @@ document.querySelectorAll(".nav-btn").forEach(b => b.addEventListener("click", (
   $("page-" + b.dataset.page).classList.add("active");
   $("page-title").textContent = titles[b.dataset.page] || "";
   if (b.dataset.page === "historial") drawHist();
+  if (b.dataset.page === "ayuda") post({ cmd: "defenderStatus" });
 }));
 
 $("btn-pause").addEventListener("click", () => {
@@ -80,6 +81,7 @@ function onMsg(m) {
   if (m.type === "config") { cfg = Object.assign(cfg, m.data || {}); applyCfg(); }
   if (m.type === "snapshot") onSnapshot(m.data);
   if (m.type === "updateStatus") onUpdate(m.data);
+  if (m.type === "defenderStatus") onDefender(m.data);
   if (m.type === "hvciStatus") {
     const d = m.data || {};
     $("hvci-status").textContent = d.result === "Ok"
@@ -89,6 +91,11 @@ function onMsg(m) {
   }
 }
 let pendingUpdate = null;
+function onDefender(d) {
+  const el = $("def-advice"); if (!el) return;
+  const st = d && d.ok ? (d.excluded ? "Exclusión ACTIVA" : "Exclusión NO aplicada") : "Sin datos";
+  el.innerHTML = `<b>${st}.</b> ${esc((d && d.message) || "")}`;
+}
 function onUpdate(d) {
   const st = $("upd-status"), dl = $("btn-dl-upd"), rt = $("btn-retry-upd");
   pendingUpdate = null; dl.style.display = "none"; rt.style.display = "none";
@@ -230,11 +237,11 @@ function renderSummary(s) {
         : tempClass(s.cpu.packageTemp, cfg.cpuWarnTemp, cfg.cpuCritTemp) === "warn-t" ? "#fbbf24" : "#22d3ee",
         degT(s.cpu.packageTemp))
     : "";
-  const batRing = s.battery.present && s.battery.percent != null ? ringSVG(s.battery.percent / 100, s.battery.percent.toFixed(0) + " %") : "";
-  const spCpu = sparkline(convT(seriesOf("cpuTemp", 300)), "#22d3ee");
-  const spLoad = sparkline(seriesOf("cpuLoad", 300), "#2f7bff");
-  const spRam = sparkline(history.filter(p => p.t >= new Date(Date.now() - 300000)).map(p => p.ramUsed), "#a78bfa");
-  const spBat = sparkline(seriesOf("batPct", 300), "#34d399");
+  const batRing = s.battery.present && s.battery.percent != null ? ringSVG(s.battery.percent / 100, s.battery.percent.toFixed(0) + " %", batRingColor(s.battery.percent)) : "";
+  const spCpu = sparkline(convT(seriesOf("cpuTemp", 300)), SERIES_COLORS.cpuTemp);
+  const spLoad = sparkline(seriesOf("cpuLoad", 300), SERIES_COLORS.cpuLoad);
+  const spRam = sparkline(history.filter(p => p.t >= new Date(Date.now() - 300000)).map(p => p.ramUsed), SERIES_COLORS.ramUsed);
+  const spBat = sparkline(seriesOf("batPct", 300), SERIES_COLORS.batPct);
   const stCpu = tempClass(s.cpu.packageTemp, cfg.cpuWarnTemp, cfg.cpuCritTemp);
   const stCls = (t) => t === "crit-t" ? "st-crit" : t === "warn-t" ? "st-warn" : t === "ok-t" ? "st-ok" : "";
   $("summary-cards").innerHTML =
@@ -246,29 +253,49 @@ function renderSummary(s) {
 function sparkline(vals, color) {
   const pts = (vals || []).filter(v => v !== null && v !== undefined);
   if (pts.length < 2) return "";
-  const w = 220, h = 44;
+  const w = 220, h = 44, pad = 5;
   const min = Math.min(...pts), max = Math.max(...pts);
   const rg = (max - min) < 1e-6 ? 1 : (max - min);
-  const X = (i) => (w * i / (vals.length - 1)).toFixed(1);
-  const Y = (v) => (h - 4 - (h - 8) * ((v - min) / rg)).toFixed(1);
-  let d = "";
-  vals.forEach((v, i) => { if (v === null || v === undefined) return; d += (d ? " L" : "M") + X(i) + " " + Y(v); });
-  return `<svg viewBox="0 0 ${w} ${h}" class="spark" preserveAspectRatio="none"><path d="${d}" fill="none" stroke="${color}" stroke-width="2"/></svg>`;
+  const X = (i) => +(pad + (w - 2 * pad) * i / (vals.length - 1)).toFixed(1);
+  const Y = (v) => +(h - pad - (h - 2 * pad) * ((v - min) / rg)).toFixed(1);
+  const coords = [];
+  vals.forEach((v, i) => { if (v !== null && v !== undefined) coords.push([X(i), Y(v)]); });
+  if (coords.length < 2) return "";
+  let d = `M ${coords[0][0]} ${coords[0][1]}`;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const p0 = coords[Math.max(0, i - 1)], p1 = coords[i], p2 = coords[i + 1], p3 = coords[Math.min(coords.length - 1, i + 2)];
+    d += ` C ${(p1[0] + (p2[0] - p0[0]) / 6).toFixed(1)} ${(p1[1] + (p2[1] - p0[1]) / 6).toFixed(1)},` +
+      ` ${(p2[0] - (p3[0] - p1[0]) / 6).toFixed(1)} ${(p2[1] - (p3[1] - p1[1]) / 6).toFixed(1)},` +
+      ` ${p2[0]} ${p2[1]}`;
+  }
+  const fill = `${d} L ${coords[coords.length - 1][0]} ${h} L ${coords[0][0]} ${h} Z`;
+  const last = coords[coords.length - 1];
+  return `<svg viewBox="0 0 ${w} ${h}" class="spark" preserveAspectRatio="none">` +
+    `<path d="${fill}" fill="${hexA(color, .16)}" stroke="none"/>` +
+    `<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>` +
+    `<circle cx="${last[0]}" cy="${last[1]}" r="2.6" fill="${color}"/></svg>`;
 }
 function gaugeSVG(frac, color, label) {
   const f = Math.max(0, Math.min(1, frac || 0));
   const len = 251.3; // semicírculo r=80
-  return `<svg viewBox="0 0 200 112" class="gauge"><path d="M 10 100 A 80 80 0 0 1 190 100" fill="none" stroke="#0b1220" stroke-width="14" stroke-linecap="round"/>` +
+  return `<svg viewBox="0 0 200 112" class="gauge"><path d="M 10 100 A 80 80 0 0 1 190 100" fill="none" stroke="rgba(148,163,184,.16)" stroke-width="14" stroke-linecap="round"/>` +
     `<path d="M 10 100 A 80 80 0 0 1 190 100" fill="none" stroke="${color}" stroke-width="14" stroke-linecap="round" stroke-dasharray="${(f * len).toFixed(1)} ${len.toFixed(1)}">` +
     `<animate attributeName="stroke-dasharray" from="0 ${len.toFixed(1)}" to="${(f * len).toFixed(1)} ${len.toFixed(1)}" dur="0.4s" fill="freeze"/></path>` +
-    `<text x="100" y="92" text-anchor="middle" fill="#e6edf6" font-size="17" font-weight="bold">${esc(label)}</text></svg>`;
+    `<text x="100" y="92" text-anchor="middle" fill="#eef4ff" font-size="17" font-weight="bold">${esc(label)}</text></svg>`;
 }
-function ringSVG(frac, label) {
+function ringSVG(frac, label, color) {
   const f = Math.max(0, Math.min(1, frac || 0));
   const c = 2 * Math.PI * 54;
-  return `<svg viewBox="0 0 130 130" class="ring"><circle cx="65" cy="65" r="54" fill="none" stroke="#0b1220" stroke-width="12"/>` +
-    `<circle cx="65" cy="65" r="54" fill="none" stroke="#22d3ee" stroke-width="12" stroke-linecap="round" transform="rotate(-90 65 65)" stroke-dasharray="${(f * c).toFixed(1)} ${c.toFixed(1)}"/>` +
-    `<text x="65" y="71" text-anchor="middle" fill="#e6edf6" font-size="19" font-weight="bold">${esc(label)}</text></svg>`;
+  const col = color || "#22d3ee";
+  return `<svg viewBox="0 0 130 130" class="ring"><circle cx="65" cy="65" r="54" fill="none" stroke="rgba(148,163,184,.16)" stroke-width="12"/>` +
+    `<circle cx="65" cy="65" r="54" fill="none" stroke="${col}" stroke-width="12" stroke-linecap="round" transform="rotate(-90 65 65)" stroke-dasharray="${(f * c).toFixed(1)} ${c.toFixed(1)}"/>` +
+    `<text x="65" y="71" text-anchor="middle" fill="#eef4ff" font-size="19" font-weight="bold">${esc(label)}</text></svg>`;
+}
+// Color del anillo de batería según nivel (verde ámbar rojo), como un widget de iOS.
+function batRingColor(pct) {
+  if (pct <= 15) return "#f87171";
+  if (pct <= 35) return "#fbbf24";
+  return "#34d399";
 }
 
 function renderCpu(s) {
@@ -276,30 +303,36 @@ function renderCpu(s) {
     `<div>Procesador</div><div>${txt(s.cpu.processorName)}</div>` +
     `<div>Núcleos</div><div>${s.cpu.coresPhysical != null ? s.cpu.coresPhysical + " físicos / " + (s.cpu.coresLogical ?? "?") + " lógicos" : "No disponible"}</div>` +
     `<div>Temperatura paquete</div><div>${degT(s.cpu.packageTemp)}</div>` +
+    `<div>Media de núcleos (calculada)</div><div>${degT(s.cpu.coreTempAvg)}</div>` +
+    `<div>Rango entre núcleos</div><div>${s.cpu.coreTempMin != null && s.cpu.coreTempMax != null ? degT(s.cpu.coreTempMin) + " – " + degT(s.cpu.coreTempMax) : "No disponible"}</div>` +
     `<div>Carga total</div><div>${s.cpu.totalLoad != null ? s.cpu.totalLoad.toFixed(1) + " %" : "No disponible"}</div>` +
+    `<div>Frecuencia media</div><div>${s.cpu.clockAvgMhz != null ? Math.round(s.cpu.clockAvgMhz) + " MHz" : "No disponible"}</div>` +
     `<div>Potencia paquete</div><div>${s.cpu.power != null ? s.cpu.power.toFixed(2) + " W" : "No disponible (sensor no expuesto)"}</div>` +
     `<div>Límite térmico (TjMax)</div><div>${s.cpu.tjMaxC != null ? degT(s.cpu.tjMaxC) + " (del procesador)" : "No disponible"}</div>` +
     `<div>Limitación térmica</div><div>${s.cpu.throttling ? "⚠ Detectada" : "No detectada"}</div>`;
   $("cpu-source-note").textContent = s.cpu.packageTempSource ? "Sensor seleccionado: " + s.cpu.packageTempSource : "Sin sensor de temperatura de CPU disponible.";
   buildCpuSensorSelect(s);
   const sess = s.session || {};
-  let hottest = "—";
+  let hottest = "—", coldest = "—";
   {
-    let mx = null, mi = -1;
+    let mx = null, mi = -1, mn = null, ni = -1;
     (s.cpu.coreTemps || []).forEach((v, i) => {
-      if (v != null && (mx === null || v > mx)) { mx = v; mi = i; }
+      if (v == null) return;
+      if (mx === null || v > mx) { mx = v; mi = i; }
+      if (mn === null || v < mn) { mn = v; ni = i; }
     });
-    if (mx !== null) {
-      const nm = (s.cpu.coreTempNames && s.cpu.coreTempNames[mi]) ? shortName(s.cpu.coreTempNames[mi]) : ("Núcleo " + mi);
-      hottest = `${nm} · ${degT(mx)}`;
-    }
+    const nameOf = (i) => (s.cpu.coreTempNames && s.cpu.coreTempNames[i]) ? shortName(s.cpu.coreTempNames[i]) : ("Núcleo " + i);
+    if (mx !== null) hottest = `${nameOf(mi)} · ${degT(mx)}`;
+    if (mn !== null) coldest = `${nameOf(ni)} · ${degT(mn)}`;
   }
   $("cpu-session").innerHTML =
     `<div>Temp. mínima (sesión)</div><div>${degT(sess.cpuTempMin)}</div>` +
     `<div>Temp. máxima (sesión)</div><div>${degT(sess.cpuTempMax)}</div>` +
     `<div>Temp. promedio (sesión)</div><div>${degT(sess.cpuTempAvg)}</div>` +
     `<div>Núcleo más caliente</div><div>${hottest}</div>` +
+    `<div>Núcleo más frío</div><div>${coldest}</div>` +
     `<div>Carga máx. (sesión)</div><div>${sess.cpuLoadMax != null ? sess.cpuLoadMax.toFixed(1) + " %" : "No disponible"}</div>` +
+    `<div>Carga promedio (sesión)</div><div>${sess.cpuLoadAvg != null ? sess.cpuLoadAvg.toFixed(1) + " %" : "No disponible"}</div>` +
     `<div>Muestras</div><div>${sess.samples != null ? sess.samples : "—"}</div>`;
   $("cpu-cards").innerHTML =
     card("Temperatura", s.cpu.packageTemp != null ? degT(s.cpu.packageTemp) : nd, "Paquete") +
@@ -452,42 +485,97 @@ function esc(s) { return String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;"
 
 // Tooltip interactivo: hora + valor exacto al pasar el ratón.
 const chartData = {};
-function drawLine(canvasId, series, unit, warn, crit, times) {
+// Colores por métrica — coherentes con la mini ventana y los medidores.
+const SERIES_COLORS = { cpuTemp: "#22d3ee", cpuLoad: "#4f8cff", ramUsed: "#a78bfa", gpuTemp: "#f472b6", batPct: "#34d399" };
+function hexA(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+// Curva suave (Catmull-Rom -> Bézier) sobre una lista de puntos [x,y].
+function traceSmooth(ctx, pts) {
+  if (!pts.length) return;
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+    ctx.bezierCurveTo(
+      p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6,
+      p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6,
+      p2[0], p2[1]);
+  }
+}
+// Trocea la serie en tramos contiguos: los null no se unen con líneas falsas.
+function segments(series, X, Y) {
+  const segs = []; let cur = [];
+  series.forEach((v, i) => {
+    if (v === null || v === undefined) { if (cur.length) segs.push(cur); cur = []; return; }
+    cur.push([X(i), Y(v)]);
+  });
+  if (cur.length) segs.push(cur);
+  return segs;
+}
+function drawLine(canvasId, series, unit, warn, crit, times, color) {
   const c = $(canvasId); if (!c) return { min: null, max: null, avg: null };
   chartData[canvasId] = { vals: series.slice(), unit, times: (times || []).slice() };
   attachTooltip(c);
   const ctx = c.getContext("2d");
   const W = c.width, H = c.height;
   ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = "#0b1220"; ctx.fillRect(0, 0, W, H);
+  const col = color || "#22d3ee";
   const pts = series.filter(v => v != null);
   if (pts.length < 2) {
-    ctx.fillStyle = "#8b98ad"; ctx.font = "13px Segoe UI";
-    ctx.fillText("Esperando datos… (sin lecturas ficticias)", 14, H / 2);
+    ctx.fillStyle = "#94a7c9"; ctx.font = "13px Segoe UI";
+    ctx.fillText("Esperando datos… (sin lecturas ficticias)", 16, H / 2);
     return { min: null, max: null, avg: null };
   }
   let min = Math.min(...pts), max = Math.max(...pts);
   if (max - min < 1e-6) { max += 1; min -= 1; }
-  const pad = (max - min) * 0.15; min -= pad; max += pad;
-  const X = (i) => 8 + (W - 16) * (i / (series.length - 1));
-  const Y = (v) => H - 10 - (H - 20) * ((v - min) / (max - min));
-  // umbrales
-  [[warn, "#fbbf24"], [crit, "#f87171"]].forEach(([t, col]) => {
+  const pad = (max - min) * 0.16; min -= pad; max += pad;
+  const X = (i) => 10 + (W - 20) * (i / (series.length - 1));
+  const Y = (v) => H - 14 - (H - 30) * ((v - min) / (max - min));
+  // Rejilla sutil de fondo
+  ctx.strokeStyle = "rgba(148,163,184,.10)"; ctx.lineWidth = 1;
+  for (let g = 1; g <= 3; g++) {
+    const gy = 14 + (H - 28) * g / 4;
+    ctx.beginPath(); ctx.moveTo(10, gy); ctx.lineTo(W - 10, gy); ctx.stroke();
+  }
+  // Umbrales informativos (discontinuos)
+  [[warn, "rgba(251,191,36,.55)"], [crit, "rgba(248,113,113,.6)"]].forEach(([t, c2]) => {
     if (t != null && t > min && t < max) {
-      ctx.strokeStyle = col; ctx.setLineDash([5, 4]); ctx.globalAlpha = 0.6;
-      ctx.beginPath(); ctx.moveTo(0, Y(t)); ctx.lineTo(W, Y(t)); ctx.stroke();
-      ctx.setLineDash([]); ctx.globalAlpha = 1;
+      ctx.strokeStyle = c2; ctx.setLineDash([5, 5]);
+      ctx.beginPath(); ctx.moveTo(10, Y(t)); ctx.lineTo(W - 10, Y(t)); ctx.stroke();
+      ctx.setLineDash([]);
     }
   });
-  // área + línea
-  const grad = ctx.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, "rgba(47,123,255,.35)"); grad.addColorStop(1, "rgba(34,211,238,.05)");
-  ctx.beginPath();
-  let started = false;
-  series.forEach((v, i) => { if (v == null) return; const x = X(i), y = Y(v); if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y); });
-  ctx.strokeStyle = "#22d3ee"; ctx.lineWidth = 2; ctx.stroke();
-  ctx.lineTo(X(series.length - 1), H); ctx.lineTo(X(0), H); ctx.closePath();
-  ctx.fillStyle = grad; ctx.fill();
+  const segs = segments(series, X, Y);
+  // Relleno degradado bajo el tramo más largo
+  const longest = segs.reduce((a, b) => (b.length > (a ? a.length : 0) ? b : a), null);
+  if (longest && longest.length >= 2) {
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, hexA(col, .30)); grad.addColorStop(1, hexA(col, .02));
+    ctx.beginPath(); traceSmooth(ctx, longest);
+    ctx.lineTo(longest[longest.length - 1][0], H); ctx.lineTo(longest[0][0], H); ctx.closePath();
+    ctx.fillStyle = grad; ctx.fill();
+  }
+  // Halo suave + línea principal (curvas suaves, sin picos falsos)
+  segs.forEach(seg => {
+    if (seg.length < 2) return;
+    ctx.beginPath(); traceSmooth(ctx, seg);
+    ctx.strokeStyle = hexA(col, .22); ctx.lineWidth = 5;
+    ctx.lineJoin = "round"; ctx.lineCap = "round"; ctx.stroke();
+  });
+  segs.forEach(seg => {
+    if (seg.length < 2) return;
+    ctx.beginPath(); traceSmooth(ctx, seg);
+    ctx.strokeStyle = col; ctx.lineWidth = 2.2;
+    ctx.lineJoin = "round"; ctx.lineCap = "round"; ctx.stroke();
+  });
+  // Punto actual con halo: "dónde estamos ahora"
+  const lastSeg = segs[segs.length - 1];
+  if (lastSeg && lastSeg.length) {
+    const [lx, ly] = lastSeg[lastSeg.length - 1];
+    ctx.beginPath(); ctx.arc(lx, ly, 6, 0, Math.PI * 2); ctx.fillStyle = hexA(col, .22); ctx.fill();
+    ctx.beginPath(); ctx.arc(lx, ly, 3.2, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill();
+  }
   const a = pts.reduce((x, y) => x + y, 0) / pts.length;
   return { min, max: Math.max(...pts), avg: a, rmin: Math.min(...pts) };
 }
@@ -534,9 +622,18 @@ function timesOf(key, rangeS) {
 }
 function drawMini() {
   const rT = 120, rR = 300;
-  statLine("stats-summary-cpu", drawLine("chart-summary-cpu", convT(seriesOf("cpuTemp", rT)), unitSym(), toUnit(cfg.cpuWarnTemp), toUnit(cfg.cpuCritTemp), timesOf("cpuTemp", rT)), unitSym());
-  statLine("stats-summary-load", drawLine("chart-summary-load", seriesOf("cpuLoad", rT), "%", 80, 95, timesOf("cpuLoad", rT)), "%");
-  statLine("stats-ram", drawLine("chart-ram", seriesOf("ramUsed", rR), "MB", null, null, timesOf("ramUsed", rR)), "MB");
+  const cpuCol = tempSeriesColor();
+  statLine("stats-summary-cpu", drawLine("chart-summary-cpu", convT(seriesOf("cpuTemp", rT)), unitSym(), toUnit(cfg.cpuWarnTemp), toUnit(cfg.cpuCritTemp), timesOf("cpuTemp", rT), cpuCol), unitSym());
+  statLine("stats-summary-load", drawLine("chart-summary-load", seriesOf("cpuLoad", rT), "%", 80, 95, timesOf("cpuLoad", rT), SERIES_COLORS.cpuLoad), "%");
+  statLine("stats-ram", drawLine("chart-ram", seriesOf("ramUsed", rR), "MB", null, null, timesOf("ramUsed", rR), SERIES_COLORS.ramUsed), "MB");
+}
+// El color de la serie de temperatura cuenta la historia: frío/aviso/crítico.
+function tempSeriesColor() {
+  const last = seriesOf("cpuTemp", 120).filter(v => v != null).pop();
+  if (last == null) return SERIES_COLORS.cpuTemp;
+  if (last >= cfg.cpuCritTemp) return "#f87171";
+  if (last >= cfg.cpuWarnTemp) return "#fbbf24";
+  return SERIES_COLORS.cpuTemp;
 }
 const convT = (arr) => cfg.unit === "F" ? arr.map(v => (v === null || v === undefined) ? null : v * 9 / 5 + 32) : arr;
 function drawHist() {
@@ -548,7 +645,7 @@ function drawHist() {
   $("hist-title").textContent = `${names[metric]} — ${$("hist-range").selectedOptions[0].textContent}`;
   const raw = seriesOf(metric, range);
   const data = (metric === "cpuTemp" || metric === "gpuTemp") ? convT(raw) : raw;
-  statLine("stats-hist", drawLine("chart-hist", data, unit, w, c, timesOf(metric, range)), unit);
+  statLine("stats-hist", drawLine("chart-hist", data, unit, w, c, timesOf(metric, range), SERIES_COLORS[metric]), unit);
 }
 $("hist-range").addEventListener("change", drawHist);
 $("hist-metric").addEventListener("change", drawHist);
@@ -588,13 +685,36 @@ function applyCfg() {
   $("cfg-bat-re").value = cfg.batteryRearm ?? 75;
   $("cfg-bat-sound").checked = cfg.batterySound !== false;
   $("cfg-bat-mode").value = cfg.batteryMode === "balloon" ? "balloon" : "popup";
-  $("cfg-auto-upd").checked = !!cfg.autoCheckUpdates;  $("ver-info").innerHTML =
+  $("cfg-auto-upd").checked = !!cfg.autoCheckUpdates;
+  applyMiniCfg();
+  $("ver-info").innerHTML =
     `<div>TempPanel</div><div>${txt(cfg.version)} (WPF + WebView2)</div>` +
     `<div>Sensores</div><div>LibreHardwareMonitorLib 0.9.6</div>` +
     `<div>Interfaz</div><div>Microsoft.Web.WebView2 1.0.2903.40 (runtime del sistema)</div>` +
     `<div>.NET</div><div>8.0 autocontenido x64</div>`;
   $("welcome").classList.toggle("hidden", !cfg.firstRun);
 }
+// ---------- Mini ventana: opciones ----------
+const MINI_KEYS = ["cpu", "temp", "bat", "ram", "gpu"];
+function applyMiniCfg() {
+  const set = new Set(String(cfg.miniSeries || "").split(",").filter(Boolean));
+  MINI_KEYS.forEach(k => {
+    const inp = $("mini-s-" + k), chip = $("chip-mini-" + k);
+    if (inp) inp.checked = set.has(k);
+    if (chip) chip.classList.toggle("on", set.has(k));
+  });
+  const ex = $("mini-expanded"); if (ex) ex.checked = !!cfg.miniExpanded;
+}
+function postMiniOptions() {
+  let series = MINI_KEYS.filter(k => { const el = $("mini-s-" + k); return el && el.checked; }).join(",");
+  if (!series) { series = "cpu"; $("mini-s-cpu").checked = true; } // nunca dejar el gráfico vacío
+  MINI_KEYS.forEach(k => { const chip = $("chip-mini-" + k); if (chip) chip.classList.toggle("on", !!$("mini-s-" + k).checked); });
+  post({ cmd: "setMiniOptions", series, expanded: $("mini-expanded").checked });
+}
+MINI_KEYS.forEach(k => $("mini-s-" + k).addEventListener("change", postMiniOptions));
+$("mini-expanded").addEventListener("change", postMiniOptions);
+$("btn-mini-open").addEventListener("click", () => post({ cmd: "openMini" }));
+$("btn-mini-reset-pos").addEventListener("click", () => post({ cmd: "resetMiniPos" }));
 $("btn-welcome-ok").addEventListener("click", () => {
   $("welcome").classList.add("hidden");
   post({ cmd: "setFirstRunDone" });
@@ -655,4 +775,11 @@ $("btn-hvci-on").addEventListener("click", () => post({ cmd: "setHvci", enabled:
 $("btn-reboot").addEventListener("click", () => {
   if (confirm("El equipo se reiniciará en 15 segundos. ¿Continuar?")) post({ cmd: "rebootNow" });
 });
+// ---------- Defender / antivirus ----------
+$("btn-def-check").addEventListener("click", () => post({ cmd: "defenderStatus" }));
+$("btn-def-add").addEventListener("click", () => {
+  if (confirm("Se añadirá una exclusión en Windows Defender solo para la carpeta de TempPanel y sus instaladores temporales.\n\nNo se desactiva ninguna protección. ¿Continuar?"))
+    post({ cmd: "defenderAdd" });
+});
+$("btn-def-remove").addEventListener("click", () => post({ cmd: "defenderRemove" }));
 applyCfg();

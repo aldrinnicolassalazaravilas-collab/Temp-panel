@@ -59,9 +59,15 @@ abrir de nuevo restaura la existente. El icono muestra el resumen vivo
 
 ## Mini ventana
 
-Botón **Mini** (arriba a la derecha) o desde la bandeja: ventana pequeña que se
-puede fijar encima de otras apps, con temperatura, carga, batería y minigráfico.
-Arrastrable, sin foco robado; doble clic o ✕ vuelve a la principal.
+Botón **Mini** (arriba a la derecha) o desde la bandeja: ventana flotante que se
+puede fijar encima de otras apps, con temperatura, carga, batería, RAM y GPU.
+Minigráfico suavizado con relleno degradado y **leyenda conmutable**: haz clic
+en cada serie (CPU/Temp/Bat/RAM/GPU) para mostrarla u ocultarla. Botón **⤢**
+para **ampliar o reducir**: en tamaño ampliado aparecen chips con RAM, GPU,
+potencia y el rango térmico de la sesión, y el gráfico crece. La posición se
+guarda sola y «Configuración → Mini ventana flotante» permite elegir las
+series, el tamaño inicial y recentrarla. Arrastrable, sin robar el foco:
+sigue visible mientras usas otras aplicaciones.
 
 ## Desinstalar
 
@@ -74,13 +80,20 @@ Panel de control → Programas → TempPanel → Desinstalar. Solo borra lo suyo
 - La comprobación automática está **desactivada por defecto** (la app no usa
   Internet salvo que lo pidas o la actives).
 - Sin Internet o sin releases, la app sigue funcionando en local sin errores.
+- Si Windows Defender retiene el instalador unos segundos (bloqueo de archivo),
+  en **Ayuda → Antivirus, Defender y SmartScreen** puedes añadir o quitar una
+  exclusión de Defender **solo para las rutas de TempPanel** (reversible, no
+  desactiva ninguna protección). El aviso azul de SmartScreen del navegador
+  solo desaparece con un certificado de firma de pago; desde la propia app el
+  instalador sale con menos fricción (se quita la marca de Internet).
 
 ## Para desarrolladores
 
 - `TempPanel.sln` — `TempPanel/` (WPF .NET 8) + `TempPanel.Tests/` (xUnit).
 - Capas: `App/MainWindow` (WPF+WebView2), `Frontend/` (HTML/CSS/JS),
-  `Sensors/` (lectura LHM 0.9.5 + WMI), `Services/` (alerta batería,
-  notificaciones, arranque con Windows), bandeja, instalador, pruebas.
+  `Sensors/` (lectura LHM 0.9.6 + WMI), `Services/` (alerta batería,
+  notificaciones, arranque con Windows, actualizador, exclusiones de Defender),
+  bandeja, instalador, pruebas.
 - Comunicación frontend↔backend por **WebMessage** (sin HTTP, sin red).
 - `dotnet test TempPanel.sln -c Release` · publish autocontenido win-x64.
 - Instalador: `TempPanel/InnoSetup/setup.iss` (Inno Setup 6).

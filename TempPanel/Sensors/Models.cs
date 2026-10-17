@@ -25,10 +25,17 @@ public sealed class CpuData
     public string? PackageTempSource { get; set; }
     public List<double?> CoreTemps { get; set; } = new();
     public List<string> CoreTempNames { get; set; } = new();
+    // Resumen calculado de los núcleos en esta misma lectura (null si no hay lecturas).
+    // Son cálculos, no sensores: sirven para ver dispersión térmica entre núcleos.
+    public double? CoreTempMin { get; set; }
+    public double? CoreTempMax { get; set; }
+    public double? CoreTempAvg { get; set; }
     public double? TotalLoad { get; set; }
     public List<double?> CoreLoads { get; set; } = new();
     public List<string> CoreLoadNames { get; set; } = new();
+    // Solo relojes de núcleo (excluye Bus Speed y similares cuando existen).
     public List<double?> CoreClocks { get; set; } = new();
+    public double? ClockAvgMhz { get; set; }
     public double? Power { get; set; }
     public bool Throttling { get; set; }
     public int? CoresPhysical { get; set; }

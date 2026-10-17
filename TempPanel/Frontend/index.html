@@ -222,6 +222,23 @@
         <div id="hvci-status" class="muted small"></div>
       </div>
       <div class="card">
+        <h3>Antivirus, Defender y SmartScreen</h3>
+        <div class="muted">Windows Defender puede retener el instalador recién descargado unos segundos
+        (bloqueo de archivo) y SmartScreen puede mostrar el aviso azul «Windows protegió tu PC» porque
+        el instalador no está firmado con un certificado de pago. Para los bloqueos, TempPanel puede
+        pedirle a Defender una <b>exclusión solo para sus propias rutas</b> (carpeta instalada e
+        instaladores en la carpeta temporal). Es opcional, reversible y no desactiva ninguna protección.</div>
+        <div class="toolbar" style="margin-top:10px">
+          <button id="btn-def-check" class="btn ghost">Comprobar estado</button>
+          <button id="btn-def-add" class="btn">Excluir TempPanel de Defender</button>
+          <button id="btn-def-remove" class="btn ghost">Quitar exclusión</button>
+        </div>
+        <div id="def-advice" class="muted small" style="margin-top:8px">Pulsa «Comprobar estado» para ver si la exclusión ya está aplicada.</div>
+        <div class="muted small" style="margin-top:8px">Si al abrir el instalador desde el navegador ves el aviso azul:
+        pulsa <b>Más información</b> → <b>Ejecutar de todos modos</b>. Desde la propia app («Buscar actualizaciones»)
+        ese aviso aparece menos porque se quita la marca de Internet del archivo.</div>
+      </div>
+      <div class="card">
         <h3>Qué significan los estados</h3>
         <div class="kv">
           <div>Valor con número</div><div>Lectura real del equipo en ese momento.</div>
@@ -283,6 +300,25 @@
           <label class="fld"><input type="checkbox" id="cfg-startup"> Iniciar con Windows (desactivado por defecto)</label>
           <div class="muted small">TempPanel sigue monitorizando minimizado. Cerrar la ventana minimiza a la bandeja; usa el menú de la bandeja para salir.</div>
         </div>
+        <div class="card">
+          <h3>Mini ventana flotante</h3>
+          <div class="muted small">Elige qué series dibuja el minigráfico (también conmutables con clic en la leyenda de la mini ventana).</div>
+          <div class="toolbar" style="margin-top:10px">
+            <label class="chip" id="chip-mini-cpu"><input type="checkbox" id="mini-s-cpu"><span class="dotchip" style="background:#4f8cff"></span>CPU</label>
+            <label class="chip" id="chip-mini-temp"><input type="checkbox" id="mini-s-temp"><span class="dotchip" style="background:#22d3ee"></span>Temp</label>
+            <label class="chip" id="chip-mini-bat"><input type="checkbox" id="mini-s-bat"><span class="dotchip" style="background:#34d399"></span>Batería</label>
+            <label class="chip" id="chip-mini-ram"><input type="checkbox" id="mini-s-ram"><span class="dotchip" style="background:#a78bfa"></span>RAM</label>
+            <label class="chip" id="chip-mini-gpu"><input type="checkbox" id="mini-s-gpu"><span class="dotchip" style="background:#f472b6"></span>GPU</label>
+          </div>
+          <label class="fld"><input type="checkbox" id="mini-expanded"> Abrir en tamaño ampliado (con chips y más gráfico)</label>
+          <div class="toolbar" style="margin-top:6px">
+            <button id="btn-mini-open" class="btn ghost">🗔 Abrir mini ventana</button>
+            <button id="btn-mini-reset-pos" class="btn ghost">Centrar de nuevo</button>
+          </div>
+          <div class="muted small">La posición de la mini ventana se guarda sola. Botón ⤢ dentro de ella para ampliar/reducir.</div>
+        </div>
+      </div>
+      <div class="grid cards-2">
         <div class="card">
           <h3>Ajustes</h3>
           <button id="btn-reset" class="btn ghost">Restablecer ajustes</button>

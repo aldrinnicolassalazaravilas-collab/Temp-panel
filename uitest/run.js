@@ -41,6 +41,7 @@ const snap = {
   timestamp: '2026-10-13T12:00:00Z', timestampLocal: '2026-10-13 12:00:00',
   cpu: { processorName: '13th Gen Intel Core i7-13620H', packageTemp: 54.3,
     packageTempSource: 'CPU Package (test)', coreTemps: [51.2, 52.0], coreTempNames: ['P-Core #1', 'P-Core #2'],
+    coreTempMin: 51.2, coreTempMax: 52.0, coreTempAvg: 51.6, clockAvgMhz: 2450,
     totalLoad: 21.4, coreLoads: [20.1, 22.3], coreLoadNames: ['CPU Core #1', 'CPU Core #2'],
     coreClocks: [2400, 2500], power: 12.5, throttling: false,
     tjMaxNames: ['P-Core #1 Distance to TjMax'], tjMaxDistances: [45.7], tjMaxC: 100, coresPhysical: 10, coresLogical: 16 },
@@ -58,7 +59,7 @@ const snap = {
   diagnostics: { isAdmin: true, hvciEnabled: false, cpuTempSensors: 23, cpuTempWithValue: 3, totalSensors: 88, sensorsWithValue: 70, driverBlocked: false, driverState: 'ok' }
 };
 
-msgHandler({ data: { type: 'config', data: { refreshMs: 2000, cpuWarnTemp: 85, cpuCritTemp: 95, gpuWarnTemp: 80, gpuCritTemp: 90, preferredCpuSensor: 'auto', unit: 'C' } } });
+msgHandler({ data: { type: 'config', data: { refreshMs: 2000, cpuWarnTemp: 85, cpuCritTemp: 95, gpuWarnTemp: 80, gpuCritTemp: 90, preferredCpuSensor: 'auto', unit: 'C', miniSeries: 'cpu,temp,bat,ram,gpu', miniExpanded: false } } });
 msgHandler({ data: { type: 'snapshot', data: snap } });
 // segunda lectura para que las gráficas tengan >= 2 puntos
 snap.timestampLocal = '2026-10-13 12:00:02'; snap.cpu.packageTemp = 55.1; snap.cpu.totalLoad = 23.0;
@@ -71,12 +72,16 @@ const checks = [
   ['gauge cpu', doc.querySelector('#summary-cards svg') !== null],
   ['sesion cpu min', get('cpu-session').includes('49.1')],
   ['nucleos P1', get('core-temps').includes('P1')],
+  ['media nucleos', get('cpu-head').includes('51.6')],
+  ['frecuencia media', get('cpu-head').includes('2450')],
   ['gpu temp', get('gpu-cards').includes('48.0')],
   ['sesion gpu', get('gpu-session').includes('45.0')],
   ['diag funcionando', get('diag-info').includes('Funcionando')],
   ['tjmax visible', get('cpu-head').includes('100')],
   ['nucleo caliente', get('cpu-session').includes('P2')],
+  ['nucleo frio', get('cpu-session').includes('P1')],
   ['bienvenida visible', !doc.getElementById('welcome').className.includes('hidden')],
+  ['chips mini on', doc.getElementById('chip-mini-cpu').className.includes('on')],
   ['tabla sensor', get('sensor-table').includes('CPU Package')],
   ['banner oculto (54C<85)', doc.getElementById('alert-banner').className.includes('hidden')],
   ['stats historial', get('stats-hist').length > 0]
@@ -89,4 +94,9 @@ msgHandler({ data: { type: 'snapshot', data: snap } });
 const crit = doc.getElementById('alert-banner').className.includes('crit');
 console.log((crit ? 'OK: ' : 'FALLO: ') + 'banner critico a 96C');
 if (!crit) fail++;
+// Defender: el mensaje del backend se pinta en Ayuda
+msgHandler({ data: { type: 'defenderStatus', data: { ok: true, excluded: true, paths: ['C:\\x'], message: 'TempPanel está excluido de Defender.' } } });
+const defOk = get('def-advice').includes('ACTIVA');
+console.log((defOk ? 'OK: ' : 'FALLO: ') + 'defender estado');
+if (!defOk) fail++;
 process.exit(fail ? 1 : 0);

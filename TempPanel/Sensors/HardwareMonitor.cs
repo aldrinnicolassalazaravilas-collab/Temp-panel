@@ -194,7 +194,7 @@ public sealed class HardwareMonitor : IDisposable
 
         var temps = new List<(string id, string name, float v)>();
         var loads = new List<(string name, float v)>();
-        var clocks = new List<float>();
+        var clocks = new List<(string name, float v)>();
         double? totalLoad = null;
         double? power = null;
 
@@ -214,7 +214,7 @@ public sealed class HardwareMonitor : IDisposable
                         loads.Add((s.Name, v));
                     break;
                 case SensorType.Clock:
-                    clocks.Add(v);
+                    clocks.Add((s.Name, v));
                     break;
                 case SensorType.Power:
                     if (s.Name.Contains("Package", StringComparison.OrdinalIgnoreCase))
@@ -223,10 +223,28 @@ public sealed class HardwareMonitor : IDisposable
             }
         }
 
-        // Selección de temperatura del paquete: preferencia del usuario o "Package"
+        // Núcleos: "Core #N", "P-Core #N", "E-Core #N" — ordenados por número
+        var coreTempList = temps
+            .Where(t => System.Text.RegularExpressions.Regex.IsMatch(t.name, @"Core\s*#?\s*\d+", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            .OrderBy(t => t.name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        cpu.CoreTemps = coreTempList.Select(t => (double?)Math.Round(t.v, 1)).ToList();
+        cpu.CoreTempNames = coreTempList.Select(t => t.name).ToList();
+        if (coreTempList.Count > 0)
+        {
+            var coreVals = coreTempList.Select(t => (double)t.v).ToList();
+            cpu.CoreTempMin = Math.Round(coreVals.Min(), 1);
+            cpu.CoreTempMax = Math.Round(coreVals.Max(), 1);
+            cpu.CoreTempAvg = Math.Round(coreVals.Average(), 1);
+        }
+
+        // Selección de temperatura del paquete: preferencia del usuario → sensor
+        // "Package" → promedio de núcleos (calculado, se etiqueta como tal) →
+        // el más alto disponible. Nunca se inventa: todo sale de sensores reales.
         if (temps.Count > 0)
         {
             (string id, string name, float v)? chosen = null;
+            bool calculated = false;
             if (!string.IsNullOrEmpty(PreferredCpuSensor) && PreferredCpuSensor != "auto")
             {
                 var match = temps.FirstOrDefault(t => t.id == PreferredCpuSensor || t.name == PreferredCpuSensor);
@@ -237,19 +255,20 @@ public sealed class HardwareMonitor : IDisposable
                 var pkg = temps.FirstOrDefault(t =>
                     t.name.Contains("Package", StringComparison.OrdinalIgnoreCase) ||
                     t.name.Contains("Paquete", StringComparison.OrdinalIgnoreCase));
-                chosen = string.IsNullOrEmpty(pkg.id) ? temps.OrderByDescending(t => t.v).First() : pkg;
+                if (!string.IsNullOrEmpty(pkg.id)) chosen = pkg;
             }
+            if (chosen == null && cpu.CoreTempAvg.HasValue)
+            {
+                chosen = ("calc-core-avg", "Promedio de núcleos (calculado)", (float)cpu.CoreTempAvg.Value);
+                calculated = true;
+            }
+            if (chosen == null)
+                chosen = temps.OrderByDescending(t => t.v).First();
             cpu.PackageTemp = Math.Round(chosen.Value.v, 1);
-            cpu.PackageTempSource = chosen.Value.name + " (" + cpuHw.Name + ")";
+            cpu.PackageTempSource = calculated
+                ? chosen.Value.name
+                : chosen.Value.name + " (" + cpuHw.Name + ")";
         }
-
-        // Núcleos: "Core #N", "P-Core #N", "E-Core #N" — ordenados por número
-        var coreTempList = temps
-            .Where(t => System.Text.RegularExpressions.Regex.IsMatch(t.name, @"Core\s*#?\s*\d+", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
-            .OrderBy(t => t.name, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        cpu.CoreTemps = coreTempList.Select(t => (double?)Math.Round(t.v, 1)).ToList();
-        cpu.CoreTempNames = coreTempList.Select(t => t.name).ToList();
 
         // Carga por núcleo/hilo: "CPU Core #N" (+ "Thread #M" en núcleos P)
         var coreLoadList = loads
@@ -268,7 +287,14 @@ public sealed class HardwareMonitor : IDisposable
             if (vals.Count > 0) cpu.TotalLoad = Math.Round(vals.Average(), 1);
         }
 
-        cpu.CoreClocks = clocks.Select(c => (double?)Math.Round(c, 0)).ToList();
+        // Relojes: preferir los de núcleo (excluye Bus Speed/uncore cuando es posible).
+        var coreClocks = clocks
+            .Where(c => System.Text.RegularExpressions.Regex.IsMatch(c.name, @"Core\s*#?\s*\d+", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            .ToList();
+        var clockSource = coreClocks.Count > 0 ? coreClocks : clocks;
+        cpu.CoreClocks = clockSource.Select(c => (double?)Math.Round(c.v, 0)).ToList();
+        if (clockSource.Count > 0)
+            cpu.ClockAvgMhz = Math.Round(clockSource.Average(c => (double)c.v), 0);
         // Potencia 0 o negativa = contador no legible (p. ej. sin admin), no un consumo real.
         if (power.HasValue && power.Value > 0) cpu.Power = Math.Round(power.Value, 2);
 
@@ -341,15 +367,27 @@ public sealed class HardwareMonitor : IDisposable
 
         double? temp = null; string? tempSrc = null;
         double? load = null; double? clock = null; double? memUsed = null;
+        int tempScore = -1, loadScore = -1;
 
         foreach (var s in hw.Sensors)
         {
             if (!s.Value.HasValue) continue;
             float v = s.Value.Value;
-            if (s.SensorType == SensorType.Temperature && temp == null)
-            { temp = Math.Round(v, 1); tempSrc = s.Name + " (" + hw.Name + ")"; }
-            else if (s.SensorType == SensorType.Load && s.Name.Contains("Core", StringComparison.OrdinalIgnoreCase) && load == null)
-                load = Math.Round(v, 1);
+            if (s.SensorType == SensorType.Temperature)
+            {
+                // Preferir "GPU Core" > cualquier temperatura GPU > primera disponible.
+                int score = s.Name.Contains("GPU Core", StringComparison.OrdinalIgnoreCase) ? 2
+                    : s.Name.Contains("GPU", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+                if (score > tempScore)
+                { temp = Math.Round(v, 1); tempSrc = s.Name + " (" + hw.Name + ")"; tempScore = score; }
+            }
+            else if (s.SensorType == SensorType.Load)
+            {
+                int score = s.Name.Contains("GPU Core", StringComparison.OrdinalIgnoreCase) ? 2
+                    : s.Name.Contains("Core", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+                if (score > loadScore)
+                { load = Math.Round(v, 1); loadScore = score; }
+            }
             else if (s.SensorType == SensorType.Clock && clock == null)
                 clock = Math.Round(v, 0);
             else if (s.SensorType == SensorType.SmallData && s.Name.Contains("Memory", StringComparison.OrdinalIgnoreCase) && memUsed == null)

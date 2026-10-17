@@ -268,6 +268,19 @@ public partial class MainWindow : Window
                         _ = DownloadUpdateAsync(urlEl.GetString() ?? "", tagEl.GetString() ?? "");
                     break;
                 case "retryLaunch": _ = RetryLaunchAsync(); break;
+                case "setMiniOptions":
+                    if (doc.RootElement.TryGetProperty("series", out var serEl))
+                        _config.MiniSeries = serEl.GetString() ?? _config.MiniSeries;
+                    if (doc.RootElement.TryGetProperty("expanded", out var exEl))
+                        _config.MiniExpanded = exEl.GetBoolean();
+                    _config.Save();
+                    _mini?.ApplyOptions();
+                    SendConfig();
+                    break;
+                case "resetMiniPos": _mini?.ResetPosition(); break;
+                case "defenderStatus": _ = DefenderStatusAsync(); break;
+                case "defenderAdd": _ = DefenderApplyAsync(add: true); break;
+                case "defenderRemove": _ = DefenderApplyAsync(add: false); break;
                 case "setAutoUpdates":
                     if (doc.RootElement.TryGetProperty("value", out var auEl))
                     {
@@ -369,6 +382,8 @@ public partial class MainWindow : Window
                     batteryFull = _config.BatteryFullEnabled,
                     autoCheckUpdates = _config.AutoCheckUpdates,
                     firstRun = _config.FirstRun,
+                    miniSeries = _config.MiniSeries,
+                    miniExpanded = _config.MiniExpanded,
                     version = UpdateService.Current().ToString()
                 }
             }, _jsonOpts);
@@ -586,6 +601,58 @@ public partial class MainWindow : Window
         }
     }
 
+    // ---------------- Defender (antivirus) ----------------
+    private async Task DefenderStatusAsync()
+    {
+        try
+        {
+            var st = await Task.Run(DefenderManager.GetStatus);
+            SendDefenderStatus(st);
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Error("DefenderStatus: " + ex.Message);
+            SendDefenderStatus(new DefenderManager.DefenderStatus { Ok = false, Message = "Error consultando Defender: " + ex.Message });
+        }
+    }
+
+    private async Task DefenderApplyAsync(bool add)
+    {
+        try
+        {
+            SendDefenderStatus(new DefenderManager.DefenderStatus
+            {
+                Ok = true,
+                Message = add ? "Aplicando exclusión en Defender…" : "Quitando exclusión…"
+            });
+            var st = await Task.Run(() => add ? DefenderManager.AddExclusions() : DefenderManager.RemoveExclusions());
+            SendDefenderStatus(st);
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Error("DefenderApply: " + ex.Message);
+            SendDefenderStatus(new DefenderManager.DefenderStatus { Ok = false, Message = "Error aplicando la exclusión: " + ex.Message });
+        }
+    }
+
+    private void SendDefenderStatus(DefenderManager.DefenderStatus st)
+    {
+        try
+        {
+            string json = JsonSerializer.Serialize(new
+            {
+                type = "defenderStatus",
+                data = new { ok = st.Ok, excluded = st.Excluded, paths = st.Paths, message = st.Message }
+            }, _jsonOpts);
+            Dispatcher.BeginInvoke(() =>
+            {
+                try { Web.CoreWebView2?.PostWebMessageAsJson(json); }
+                catch { }
+            });
+        }
+        catch { }
+    }
+
     // ---------------- Ventana / bandeja ----------------
     private void OnClosingWindow(object? sender, System.ComponentModel.CancelEventArgs e)
     {
@@ -614,17 +681,25 @@ public partial class MainWindow : Window
         {
             if (_mini == null)
             {
-                _mini = new MiniWindow(RestoreWindow);
+                _mini = new MiniWindow(_config, OnMiniConfigChanged, RestoreWindow);
                 _mini.Closed += (_, __) => { _mini = null; };
                 _mini.Show();
             }
             else
             {
+                _mini.ApplyOptions();
                 _mini.Activate();
             }
             Hide(); // la principal se esconde; la mini queda fija encima
         }
         catch (Exception ex) { AppLogger.Error("OpenMini: " + ex.Message); }
+    }
+
+    /// <summary>La mini ventana cambió opciones (series, tamaño, posición): persistir y sincronizar la UI.</summary>
+    private void OnMiniConfigChanged()
+    {
+        try { _config.Save(); SendConfig(); }
+        catch (Exception ex) { AppLogger.Error("MiniConfig: " + ex.Message); }
     }
 
     private void ExitApp()

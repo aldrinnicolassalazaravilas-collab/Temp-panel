@@ -77,6 +77,26 @@ public sealed class AppConfig
     public bool AutoCheckUpdates { get; set; } = false;
     // Bienvenida inicial: true hasta que el usuario la confirma.
     public bool FirstRun { get; set; } = true;
+    // Mini ventana: series visibles en el minigráfico ("cpu,temp,bat,ram,gpu"),
+    // tamaño ampliado y última posición en pantalla (se guarda al moverla).
+    public string MiniSeries { get; set; } = "cpu,temp,bat,ram,gpu";
+    public bool MiniExpanded { get; set; } = false;
+    public double? MiniLeft { get; set; }
+    public double? MiniTop { get; set; }
+
+    public static readonly string[] MiniSeriesKeys = { "cpu", "temp", "bat", "ram", "gpu" };
+
+    public bool IsMiniSeriesEnabled(string key) =>
+        MiniSeries.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                  .Contains(key, StringComparer.OrdinalIgnoreCase);
+
+    public void ToggleMiniSeries(string key)
+    {
+        var set = MiniSeries.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (!set.Add(key)) set.Remove(key);
+        MiniSeries = string.Join(',', MiniSeriesKeys.Where(set.Contains));
+    }
 
     /// <summary>Garantiza reactivación &lt; alerta y rangos válidos.</summary>
     public void Normalize()
@@ -87,6 +107,11 @@ public sealed class AppConfig
         if (BatteryRearm >= BatteryThreshold) BatteryRearm = BatteryThreshold - 5;
         if (BatteryMode != "balloon") BatteryMode = "popup";
         if (Unit != "F") Unit = "C";
+        // Mini: solo claves conocidas, en orden canónico; nunca vacío (una serie mínima).
+        var miniSet = MiniSeries.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var ordered = MiniSeriesKeys.Where(miniSet.Contains).ToArray();
+        MiniSeries = ordered.Length > 0 ? string.Join(',', ordered) : "cpu";
     }
 
     public void ResetToDefaults()
@@ -108,6 +133,10 @@ public sealed class AppConfig
         Unit = fresh.Unit;
         StartWithWindows = fresh.StartWithWindows;
         AutoCheckUpdates = fresh.AutoCheckUpdates;
+        MiniSeries = fresh.MiniSeries;
+        MiniExpanded = fresh.MiniExpanded;
+        MiniLeft = null;
+        MiniTop = null;
         // FirstRun NO se restablece: la bienvenida solo sale una vez.
     }
 

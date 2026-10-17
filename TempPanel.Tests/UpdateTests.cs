@@ -121,4 +121,33 @@ public sealed class UpdateServiceTests
         Assert.Contains("67", gotMsg);
         Assert.DoesNotContain("80", gotTitle + gotMsg);
     }
+
+    [Fact]
+    public void Defender_Paths_Cover_Install_And_Temp()
+    {
+        var paths = DefenderManager.TargetPaths();
+        Assert.NotEmpty(paths);
+        Assert.Contains(paths, p => p.Contains("TempPanel-Setup-*"));
+        foreach (var p in paths) Assert.False(p.EndsWith('\\'));
+    }
+
+    [Fact]
+    public void MiniSeries_Normalize_Keeps_Known_Keys_Only()
+    {
+        var cfg = new AppConfig();
+        cfg.Normalize();
+        Assert.Equal("cpu,temp,bat,ram,gpu", cfg.MiniSeries);
+
+        cfg.ToggleMiniSeries("ram");
+        Assert.Equal("cpu,temp,bat,gpu", cfg.MiniSeries);
+        Assert.False(cfg.IsMiniSeriesEnabled("ram"));
+
+        cfg.MiniSeries = "gpu,basura,cpu,bat"; // claves desconocidas y fuera de orden
+        cfg.Normalize();
+        Assert.Equal("cpu,bat,gpu", cfg.MiniSeries);
+
+        cfg.MiniSeries = "";
+        cfg.Normalize();
+        Assert.Equal("cpu", cfg.MiniSeries); // nunca queda vacío
+    }
 }
