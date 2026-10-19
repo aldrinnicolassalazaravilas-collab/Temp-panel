@@ -1,7 +1,7 @@
 {
   "name": "temppanel-web",
   "private": true,
-  "version": "2.5.0",
+  "version": "2.5.1",
   "description": "Interfaz de TempPanel (Svelte 5 + Vite). Se compila a TempPanel/Frontend, que es lo que embebe la app WPF.",
   "type": "module",
   "scripts": {

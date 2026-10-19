@@ -11,6 +11,8 @@ namespace TempPanel;
 /// Punto de entrada WPF. Modos sin GUI para verificación:
 /// --selftest escribe %TEMP%\temppanel-selftest.json y sale.
 /// --test-battery-alert muestra la ventana de alerta en modo prueba.
+/// --uicheck abre la ventana real (perfil de WebView2 aparte), comprueba que la
+/// interfaz carga y sale con 0/1 según el resultado (se puede lanzar sin elevar).
 /// </summary>
 public partial class App : System.Windows.Application
 {
@@ -37,14 +39,15 @@ public partial class App : System.Windows.Application
             AppLogger.Error("DispatcherException: " + ex.Exception);
             ex.Handled = true;
         };
-        AppLogger.Info("TempPanel iniciado v2.5.0");
+        AppLogger.Info("TempPanel iniciado v" + (typeof(App).Assembly.GetName().Version?.ToString(3) ?? "?"));
 
         try { _appMutex = new System.Threading.Mutex(true, "TempPanelAppMutex"); }
         catch (Exception ex) { AppLogger.Error("Mutex: " + ex.Message); }
 
         var args = e.Args ?? Array.Empty<string>();
         bool cli = args.Any(a => a.Equals("--selftest", StringComparison.OrdinalIgnoreCase) ||
-                                 a.Equals("--test-battery-alert", StringComparison.OrdinalIgnoreCase));
+                                 a.Equals("--test-battery-alert", StringComparison.OrdinalIgnoreCase) ||
+                                 a.Equals("--uicheck", StringComparison.OrdinalIgnoreCase));
         if (!cli)
         {
             // Instancia única: si ya hay una, restaura su ventana y sale,
@@ -83,8 +86,41 @@ public partial class App : System.Windows.Application
             win.Show();
             return;
         }
+        if (args.Any(a => a.Equals("--uicheck", StringComparison.OrdinalIgnoreCase)))
+        {
+            // Verificación de la ventana real sin elevar: crea la ventana con un
+            // perfil de WebView2 aparte (no toca la app abierta), espera a que la
+            // interfaz cargue y sale con código 0 (OK) o 1 (fallo). Sin bandeja,
+            // sin diálogos y sin instancia única.
+            base.OnStartup(e);
+            var win = new MainWindow(uiCheck: true);
+            win.Show();
+            StartUiCheck(win);
+            return;
+        }
 
         base.OnStartup(e);
+        // App.xaml ya no usa StartupUri: la ventana principal se crea aquí (así el
+        // modo --uicheck puede abrir la misma ventana con otro perfil sin duplicar).
+        var main = new MainWindow();
+        main.Show();
+    }
+
+    private void StartUiCheck(MainWindow win)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        timer.Tick += (_, __) =>
+        {
+            if (!win.UiReady && DateTime.UtcNow <= deadline) return;
+            timer.Stop();
+            bool ok = win.UiReady;
+            string control = win.GlassActive ? "cristal (transparencia)" : "clásico (opaco)";
+            if (ok) AppLogger.Info($"UICHECK OK: interfaz cargada · control {control}");
+            else AppLogger.Error($"UICHECK FALLO: la interfaz no cargó en 30 s · control {control}");
+            Environment.Exit(ok ? 0 : 1);
+        };
+        timer.Start();
     }
 
     private bool AcquireAfterWait()

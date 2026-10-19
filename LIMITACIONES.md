@@ -1,4 +1,4 @@
-# Limitaciones conocidas — TempPanel 2.5.0
+# Limitaciones conocidas — TempPanel 2.5.1
 
 Verificadas en Lenovo IdeaPad Slim 3 15IRH10 (i7-13620H, 24 GB, Intel UHD)
 con Windows 11 Pro (build 26200).
@@ -25,7 +25,11 @@ con Windows 11 Pro (build 26200).
    tal cual («Cargando · retenida por el equipo») y mide la tendencia observada
    en lugar de fingir que sube. Temperatura y ciclos: no expuestos por Windows;
    no se muestran.
-5. **WebView2 Runtime**: necesario; preinstalado en la mayoría de equipos.
+5. **WebView2 Runtime**: necesario; preinstalado en la mayoría de equipos. La
+   transparencia real (cristal) usa el control con composición de WebView2 y el
+   acrílico de Windows 11; si el sistema no lo soporta (o falla al inicializar),
+   la app pasa sola al modo opaco y avisa en el registro. Nunca deja la ventana
+   en negro (bug corregido en 2.5.1).
 6. **Aviso de SmartScreen**: el instalador no está firmado con un certificado de
    pago, así que al abrirlo desde el navegador puede aparecer «Windows protegió
    tu PC» (Más información → Ejecutar de todos modos). Descargándolo desde la

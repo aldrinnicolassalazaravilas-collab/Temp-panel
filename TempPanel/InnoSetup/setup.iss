@@ -1,8 +1,8 @@
-﻿; TempPanel — Instalador Inno Setup
+; TempPanel � Instalador Inno Setup
 ; Requiere: publish self-contained en ..\publish\win-x64
 
 #define MyAppName "TempPanel"
-#define MyAppVersion "2.5.0"
+#define MyAppVersion "2.5.1"
 #define MyAppPublisher "TempPanel"
 #define MyAppURL "https://github.com/temppanel/temppanel"
 #define MyAppExeName "TempPanel.exe"
@@ -46,6 +46,13 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTA: no se borran archivos personales; solo los propios (ver [UninstallDelete])
 
+[InstallDelete]
+; Restos del frontend antiguo al actualizar desde v2.5.0 o anterior: ahora todo
+; el bundle vive en Frontend\assets\ y estos archivos ya no se usan.
+Type: files; Name: "{app}\Frontend\app.js"
+Type: files; Name: "{app}\Frontend\styles.css"
+Type: files; Name: "{app}\TempPanel.pdb"
+
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
@@ -55,8 +62,8 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent shellexec
 
 [UninstallDelete]
-; Limpia solo caché WebView2 local de TempPanel (los ajustes del usuario se conservan a propósito
-; salvo que el usuario los borre; no se toca ningún archivo personal).
+; Limpia solo cach� WebView2 local de TempPanel (los ajustes del usuario se conservan a prop�sito
+; salvo que el usuario los borre; no se toca ning�n archivo personal).
 Type: filesandordirs; Name: "{localappdata}\TempPanel\WebView2"
 
 [Code]
@@ -76,8 +83,8 @@ begin
   if not IsWebView2Installed() then
   begin
     Res := MsgBox('TempPanel necesita el runtime Microsoft Edge WebView2 para mostrar su interfaz.' + #13#10 + #13#10 +
-      'Si continúas sin él, la aplicación mostrará un mensaje con el enlace de descarga oficial.' + #13#10 + #13#10 +
-      '¿Deseas abrir la página de descarga ahora?',
+      'Si contin�as sin �l, la aplicaci�n mostrar� un mensaje con el enlace de descarga oficial.' + #13#10 + #13#10 +
+      '�Deseas abrir la p�gina de descarga ahora?',
       mbConfirmation, MB_YESNO);
     if Res = IDYES then
       ShellExec('open', 'https://go.microsoft.com/fwlink/p/?LinkId=2124703', '', '', SW_SHOW, ewNoWait, Res);

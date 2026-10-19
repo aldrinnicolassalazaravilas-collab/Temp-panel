@@ -51,8 +51,12 @@ Si falta WebView2, el instalador te muestra el enlace oficial de Microsoft.
 > «No disponible» significa que tu hardware no publica ese sensor. Nunca se
 > muestran cifras inventadas.
 
-## Interfaz translúcida y consumo (novedad v2.5.0)
+## Interfaz translúcida y consumo (novedad v2.5.0; v2.5.1 corrige la ventana en negro)
 
+- **v2.5.1 — ventana en negro corregida**: la 2.5.0 podía abrirse sin interfaz
+  (faltaba un ensamblado del SDK de Windows que necesita el cristal). La 2.5.1 lo
+  incluye y, si el cristal no está disponible, la app pasa sola al tema oscuro
+  opaco en vez de quedarse vacía.
 - **Cristal real de Windows 11**: la ventana no tiene marco; el fondo es
   acrílico translúcido con esquinas redondeadas dibujado por Windows (efecto
   «Mica»/«Acrílico»), y la interfaz se adapta a él. La barra superior

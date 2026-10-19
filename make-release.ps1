@@ -1,11 +1,11 @@
-# Crea el Release v2.5.0 en GitHub y sube el instalador como asset.
+# Crea el Release v2.5.1 en GitHub y sube el instalador como asset.
 # Usa la credencial ya guardada en el equipo (no pide ni muestra secretos).
-# Ejecutar cuando dist\TempPanel-Setup-x64.exe sea el build v2.5.0 final.
+# Ejecutar cuando dist\TempPanel-Setup-x64.exe sea el build v2.5.1 final.
 $ErrorActionPreference = "Stop"
 
 $owner = "aldrinnicolassalazaravilas-collab"
 $repo = "Temp-panel"
-$tag = "v2.5.0"
+$tag = "v2.5.1"
 $asset = "C:\tempanel\dist\TempPanel-Setup-x64.exe"
 
 if (-not (Test-Path $asset)) { Write-Output "FALTA asset: $asset"; exit 1 }
@@ -23,8 +23,9 @@ catch { $rel = $null }
 
 if (-not $rel) {
   Write-Output "Creando release $tag..."
+  $notes = Get-Content "C:\tempanel\release-notes-v2.5.1.md" -Raw -Encoding UTF8
   $body = @{ tag_name = $tag; name = "TempPanel $tag"; draft = $false; prerelease = $false;
-    body = "TempPanel ${tag}: monitor de hardware en tiempo real para Windows. Instalador autocontenido x64." } | ConvertTo-Json
+    body = $notes } | ConvertTo-Json
   $rel = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$owner/$repo/releases" -Headers $H -Body $body -ContentType "application/json" -TimeoutSec 30
 } else { Write-Output "Release $tag ya existe (id $($rel.id))" }
 

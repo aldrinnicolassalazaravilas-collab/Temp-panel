@@ -1,17 +1,20 @@
-# Informe de pruebas — TempPanel 2.5.0
+# Informe de pruebas — TempPanel 2.5.1
 
-Fecha: 2026-10-18. Equipo: Lenovo 83K1, i7-13620H, 24 GB, Intel UHD, Windows 11
-Pro (build 26200). Distingue pruebas automatizadas, compilación y pruebas reales
-en el dispositivo. Todo lo que aparece aquí se ejecutó de verdad; lo que no se
-pudo comprobar se dice explícitamente en §9.
+Fecha: 2026-10-19 (2.5.1), sobre las pruebas de 2.5.0 del 2026-10-18. Equipo:
+Lenovo 83K1, i7-13620H, 24 GB, Intel UHD, Windows 11 Pro (build 26200).
+Distingue pruebas automatizadas, compilación y pruebas reales en el dispositivo.
+Todo lo que aparece aquí se ejecutó de verdad; lo que no se pudo comprobar se
+dice explícitamente en §10.
 
 ## 1. Compilación Release
 
 - `dotnet test TempPanel.sln -c Release` → **70/70 pruebas superadas, 0 errores**
   (incluye las nuevas de precisión: tasas de carga/descarga coherentes, nivel con
   capacidades reales, filtro de plausibilidad térmica).
-- `dotnet publish -r win-x64 --self-contained` → `TempPanel.exe` 167,6 MB;
-  `DebugType=embedded`: no se publica ningún `.pdb` suelto.
+- `dotnet publish -r win-x64 --self-contained` → `TempPanel.exe` 191,9 MB;
+  `DebugType=embedded`: no se publica ningún `.pdb` suelto. Los ~24 MB extra son
+  `Microsoft.Windows.SDK.NET.dll` (23,6 MB) + `WinRT.Runtime.dll`, que exige el
+  control WebView2 con composición para la transparencia real (v2.5.1).
 - Interfaz: `npm run build` en `TempPanel/Web` → 138 módulos, `assets/app.js`
   123,7 kB + `assets/style.css` 17,2 kB, script clásico y rutas relativas.
 
@@ -59,7 +62,7 @@ navegador Chromium con consultas al DOM:
   al copiar el resumen y `view:<página>` enviado al cambiar de página.
 - **Cero errores en la consola del navegador** durante todo el recorrido.
 
-## 4. Sensores reales (equipo del usuario, `--selftest` 2026-10-18 20:30:03)
+## 4. Sensores reales (equipo del usuario, `--selftest` 2026-10-18 20:30:03; el backend de sensores no cambia en 2.5.1)
 
 - CPU i7-13620H: **paquete 82 °C** en carga, 23/23 sensores de temperatura de CPU
   con valor (driver `ok`), carga total 20,5 %, 16 cargas núcleo/hilo.
@@ -85,10 +88,11 @@ navegador Chromium con consultas al DOM:
 
 ## 6. Instalador
 
-- `dist\TempPanel-Setup-x64.exe` recompilado con Inno Setup 6 (48,8 MB,
-  2026-10-18 20:32) a partir de `publish\v2.5.0\`, que contiene el `Frontend/`
+- `dist\TempPanel-Setup-x64.exe` recompilado con Inno Setup 6 (**54,7 MB**,
+  2026-10-19 14:33) a partir de `publish\v2.5.1\`, que contiene el `Frontend/`
   **compilado** (`index.html` + `assets/app.js` + `assets/style.css`) y ningún
-  `.pdb` suelto.
+  `.pdb` suelto. Incluye `[InstallDelete]` para borrar los restos del frontend
+  antiguo (`Frontend\app.js`, `Frontend\styles.css`) al actualizar.
 - Sigue siendo por usuario (`PrivilegesRequired=lowest`): instala en
   `%LocalAppData%\Programs\TempPanel` y registra en `HKCU\...\Uninstall`.
 - La app instalada no necesita Node, ni .NET, ni Internet.
@@ -109,13 +113,58 @@ navegador Chromium con consultas al DOM:
 - La app solo usa Internet si pulsas «Buscar actualizaciones» o activas la
   comprobación automática (desactivada por defecto).
 
-## 9. Lo que NO se pudo verificar (y por qué)
+## 9. Corrección v2.5.1: ventana negra al abrir (bug de v2.5.0)
 
-- **GUI en el escritorio real**: la app pide elevación y el usuario canceló el
-  aviso de UAC durante las pruebas. La interfaz se verificó sobre el mismo
-  bundle compilado en un navegador real y con JSDOM; el cristal acrílico real
-  detrás de la ventana lo dibuja Windows y solo puede comprobarse ejecutando la
-  app instalada.
+La v2.5.0 instalada abría una ventana **negra sin interfaz** (reportado por el
+usuario con captura). El registro de la app lo delataba:
+
+```
+[2026-10-19 14:05:28] [INFO] Cristal: acrílico aplicado
+[2026-10-19 14:05:28] [ERROR] DispatcherException: System.IO.FileNotFoundException:
+  File name: 'Microsoft.Windows.SDK.NET, Version=10.0.17763.10'
+  at Microsoft.Web.WebView2.Wpf.WebView2CompositionControl.WebView2CompositionControl_Loaded(...)
+```
+
+Causa doble:
+
+1. El TFM era `net8.0-windows`, así que el publish no incluía las proyecciones
+   del SDK de Windows (`Microsoft.Windows.SDK.NET.dll`) que necesita
+   `WebView2CompositionControl` (el control que permite ver el acrílico a través
+   de la interfaz). El control lanzaba `FileNotFoundException` al cargarse y la
+   ventana quedaba en negro; el respaldo al control opaco nunca llegaba a
+   ejecutarse porque `EnsureCoreWebView2Async` se quedaba esperando.
+2. Al corregir lo anterior apareció un segundo problema: el control estaba
+   `Collapsed` (sin tamaño) al inicializarse y `EnsureCoreWebView2Async` tampoco
+   terminaba. Debe estar visible y con layout antes de inicializar.
+
+Arreglos:
+
+- TFM `net8.0-windows10.0.17763.0` en la app **y en los tests** (así se publica
+  `Microsoft.Windows.SDK.NET.dll` dentro del bundle single-file).
+- El control se hace `Visible` + `UpdateLayout()` antes de
+  `EnsureCoreWebView2Async`, con tope de 20 s.
+- Red de seguridad: si faltan las proyecciones o el control no responde, se quita
+  del árbol y la app usa el control clásico (opaco) — **nunca** una ventana vacía.
+- Instalador: `[InstallDelete]` de los archivos viejos del frontend.
+
+Verificación (nuevo modo `--uicheck`: abre la ventana real sin elevar, con perfil
+de WebView2 aparte, espera a que la interfaz cargue y sale con 0/1):
+
+| Ejecución | Resultado | Tiempo |
+|---|---|---|
+| `dotnet ...\TempPanel.dll --uicheck` (framework-dependent) | `UICHECK OK · control cristal (transparencia)` | 2,6 s |
+| Exe **single-file autocontenido** (manifiesto asInvoker solo para la prueba) | `UICHECK OK · control cristal (transparencia)` | 6,1 s |
+
+Ambas resolviendo `Microsoft.Windows.SDK.NET.dll` desde el bundle; el registro no
+muestra ningún `DispatcherException`. Además: `dotnet test` → 70/70 y
+`node uitest\run.js` → 52/52.
+
+## 10. Lo que NO se pudo verificar (y por qué)
+
+- **Aspecto visual del cristal sobre el escritorio**: el modo `--uicheck`
+  confirma que el control con composición inicializa, que la interfaz carga y que
+  no hay errores, pero el acrílico/DWM real solo se ve en la app instalada y
+  elevada; la valoración final del aspecto la hace el usuario.
 - **Aviso físico de batería al 80 %**: la batería estaba al 61,5 % descargando.
 - **RPM de ventiladores, temperatura/ciclos de batería**: este hardware no los
   expone; mostrarlos sería inventarlos.
@@ -123,5 +172,5 @@ navegador Chromium con consultas al DOM:
 ## Nota
 
 Este informe se actualizará con lo que se observe en el uso diario de la versión
-instalada (v2.5.0). El historial de la interfaz se guarda solo en memoria: el CSV
+instalada (v2.5.1). El historial de la interfaz se guarda solo en memoria: el CSV
 y el registro de sesión se escriben únicamente si los pides.

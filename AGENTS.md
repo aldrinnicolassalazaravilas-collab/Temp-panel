@@ -12,7 +12,7 @@ Windows-only repo (WPF .NET 8 app + xUnit tests + Inno Setup installer). Shell t
 
 ## Layout
 
-- `TempPanel/` — WPF app. Entry: `App.xaml(.cs)` (handles `--selftest`, `--test-battery-alert`); UI: `MainWindow.xaml(.cs)` + WebView2; `Sensors/` (LHM/HWiNFO/WMI reading, never invent values — null = unavailable); `Services/` (battery alert, notifier, startup); `InnoSetup/setup.iss`.
+- `TempPanel/` — WPF app. Entry: `App.xaml(.cs)` (handles `--selftest`, `--test-battery-alert`, `--uicheck`); UI: `MainWindow.xaml(.cs)` + WebView2; `Sensors/` (LHM/HWiNFO/WMI reading, never invent values — null = unavailable); `Services/` (battery alert, notifier, startup); `InnoSetup/setup.iss`.
 - `TempPanel/Web/` — **fuentes de la interfaz** (Svelte 5 + Vite, runes). Se compilan a `TempPanel/Frontend/` (HTML/JS/CSS planos, sin CDN): esa carpeta es salida generada, no se edita a mano.
 - `TempPanel/Frontend/` — salida de la interfaz que embebe el instalador (`index.html` + `assets/app.js` + `assets/style.css`) + `_preview.html` (vista previa de desarrollo, excluida del .csproj).
 - `TempPanel.Tests/` — xUnit: `BatteryTests.cs`, `HwinfoTests.cs` (synthetic SHM buffer), `PrecisionTests.cs` (tasas coherentes de batería y precisión).
@@ -28,9 +28,10 @@ cd C:\tempanel\TempPanel\Web; npm run build        # interfaz Svelte -> TempPane
 node C:\tempanel\uitest\run.js                     # 52 comprobaciones DOM sobre el bundle compilado
 node C:\tempanel\uitest\preview.js                 # genera Frontend\_preview.html (datos reales del selftest)
 node C:\tempanel\uitest\csslint.js                 # CSS compilado + fuente, paréntesis balanceados
-C:\Program` Files\dotnet\dotnet.exe publish C:\tempanel\TempPanel\TempPanel.csproj -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true -o C:\tempanel\publish\v2.5.0
-& 'C:\Users\LENOVO\AppData\Local\Programs\Inno Setup 6\ISCC.exe' /DPublishDir=C:\tempanel\publish\v2.5.0 C:\tempanel\TempPanel\InnoSetup\setup.iss
-C:\tempanel\publish\v2.5.0\TempPanel.exe --selftest   # writes %TEMP%\temppanel-selftest.json, no GUI
+C:\Program` Files\dotnet\dotnet.exe publish C:\tempanel\TempPanel\TempPanel.csproj -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true -o C:\tempanel\publish\v2.5.1
+& 'C:\Users\LENOVO\AppData\Local\Programs\Inno Setup 6\ISCC.exe' /DPublishDir=C:\tempanel\publish\v2.5.1 C:\tempanel\TempPanel\InnoSetup\setup.iss
+C:\tempanel\publish\v2.5.1\TempPanel.exe --selftest   # writes %TEMP%\temppanel-selftest.json, no GUI
+& "C:\Program Files\dotnet\dotnet.exe" C:\tempanel\TempPanel\bin\Release\net8.0-windows10.0.17763.0\TempPanel.dll --uicheck   # ventana real sin elevar: 0 = interfaz cargada (revisa el log)
 ```
 
 Antes de publicar hay que **compilar la interfaz** (`npm run build`): el proyecto .NET solo copia `TempPanel/Frontend/`. En una máquina sin Node la app se puede compilar/publicar igual, con el `Frontend/` ya compilado que está en el repo.
@@ -43,6 +44,7 @@ Antes de publicar hay que **compilar la interfaz** (`npm run build`): el proyect
 - Interfaz (Svelte): el bundle compilado **se commitea** en `TempPanel/Frontend/` (así `dotnet publish` nunca necesita npm). Prohibido CDN/fuentes externas: todo local. El bundle sale como script clásico (no módulo) para que la vista previa y JSDOM puedan cargarlo igual; `vite.config.js` lo baja al final del body.
 - La ventana sin marco depende de dos contratos con el nativo: franja de arrastre de **44 px** (`CaptionHeight`) y **150 px** a la derecha reservados para los botones (`win-min`, `win-max`, `win-close` en `#titlebar`). El título de la ventana WPF (`TempPanel — Monitor de hardware en tiempo real`) lo usa `App.RestoreExisting` vía `FindWindow`: no cambiarlo.
 - El cristal lo decide la app nativa: añade `body.glass` o `body.no-glass`. La transparencia interna (`--panel-a`) es solo de la interfaz (preferencia local en `localStorage`, no va a `config.json`).
+- **TFM `net8.0-windows10.0.17763.0` (app y tests) es obligatorio**: `WebView2CompositionControl` (transparencia real) necesita `Microsoft.Windows.SDK.NET.dll`. Con `net8.0-windows` el control falla al cargarse (`FileNotFoundException`) y la ventana queda **negra** (bug de v2.5.0). Además el control debe estar **Visible y con tamaño** antes de `EnsureCoreWebView2Async`; estando `Collapsed` la inicialización no termina. Red de seguridad: sin proyecciones o si tarda >20 s se quita del árbol y se usa el control clásico opaco (la app nunca queda vacía). Verifícalo con `--uicheck`: el log debe decir `control cristal (transparencia)`.
 - `UseWPF + UseWindowsForms` both true (NotifyIcon). Missing `using System.IO;` in `Sensors/`/`Services/` breaks the build — implicit usings don't cover it here; and don't name a member `Path` (collides with `System.IO.Path`).
 - Sensor honesty is a product rule: null/absent stays "No disponible"; `0`/guesses are bugs (see `TUTORIAL.md`, `LIMITACIONES.md`).
 - UIA popup test (`test-popup.ps1`) needs the window to appear first — wait-loop up to ~20 s; cold single-file start is slow.

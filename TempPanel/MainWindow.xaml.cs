@@ -33,10 +33,28 @@ public partial class MainWindow : Window
 
     // --- v2.5.0: cristal (transparencia real), suspensión de WebView2 y RAM ---
     private readonly Process _self = Process.GetCurrentProcess();
+
+    /// <summary>
+    /// El control WebView2 con transparencia (WebView2CompositionControl) necesita
+    /// el ensamblado de proyecciones del SDK de Windows. Se comprueba una sola vez:
+    /// si no está, se usa el control clásico en lugar de dejar la ventana en negro.
+    /// </summary>
+    private static readonly bool WindowsSdkProjections = CheckWindowsSdkProjections();
+
+    private static bool CheckWindowsSdkProjections()
+    {
+        try { System.Reflection.Assembly.Load("Microsoft.Windows.SDK.NET"); return true; }
+        catch { return false; }
+    }
     private Microsoft.Web.WebView2.Wpf.IWebView2? _web;      // control activo (cristal o clásico)
     private FrameworkElement? _webElement;
     private CoreWebView2? _core;
     private bool _glassMode;
+    private readonly bool _uiCheck;
+    /// <summary>--uicheck: la interfaz ya cargó (lo consulta el modo de prueba).</summary>
+    public bool UiReady { get; private set; }
+    /// <summary>--uicheck: se está usando el control con transparencia.</summary>
+    public bool GlassActive => _glassMode;
     private bool _webSuspended;
     private bool _webVisible = true;
     private string _page = "resumen";
@@ -44,9 +62,26 @@ public partial class MainWindow : Window
     private const double CaptionHeight = 44;
     private const double CaptionButtonsWidth = 150;
 
-    public MainWindow()
+    public MainWindow() : this(false) { }
+
+    /// <param name="uiCheck">Modo de verificación (--uicheck): perfil de WebView2
+    /// aparte, sin bandeja y sin diálogos modales, para poder probar la ventana
+    /// desde la línea de comandos sin tocar la app que el usuario tenga abierta.</param>
+    public MainWindow(bool uiCheck)
     {
         InitializeComponent();
+        _uiCheck = uiCheck;
+
+        // El control con transparencia (WebView2CompositionControl) necesita las
+        // proyecciones del SDK de Windows (Microsoft.Windows.SDK.NET). Si faltan,
+        // el control revienta al cargarse (FileNotFoundException) y la ventana se
+        // queda en negro: se saca del árbol ANTES de que eso ocurra y la app usa
+        // el control clásico (opaco pero visible). Nunca una ventana vacía.
+        if (!WindowsSdkProjections)
+        {
+            Root.Children.Remove(WebGlass);
+            AppLogger.Info("Cristal: faltan las proyecciones del SDK de Windows; se usará el control clásico.");
+        }
 
         _config = AppConfig.Load();
         _monitor = new HardwareMonitor
@@ -65,7 +100,7 @@ public partial class MainWindow : Window
         _tray = new System.Windows.Forms.NotifyIcon
         {
             Text = "TempPanel — Monitor de hardware",
-            Visible = true
+            Visible = !uiCheck
         };
         try
         {
@@ -132,7 +167,7 @@ public partial class MainWindow : Window
             string userData = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "TempPanel", "WebView2",
-                UpdateService.Current().ToString()); // perfil por versión: evita bloqueos de perfiles viejos
+                UpdateService.Current().ToString() + (_uiCheck ? "-uicheck" : "")); // perfil por versión: evita bloqueos de perfiles viejos
             Directory.CreateDirectory(userData);
 
             // v2.5.0 — menos RAM: caché de disco pequeña, sin servicios de fondo
@@ -149,21 +184,31 @@ public partial class MainWindow : Window
             // Windows 11: control con transparencia real (el acrílico de DWM
             // se ve a través de la interfaz). Si algo falla, cae al control
             // clásico opaco y la app sigue funcionando igual.
-            if (WindowFx.SupportsGlass())
+            if (WindowFx.SupportsGlass() && WindowsSdkProjections)
             {
                 try
                 {
+                    // El control con composición necesita estar visible y con tamaño
+                    // para crear su superficie; si no, la inicialización no termina.
+                    WebGlass.Visibility = Visibility.Visible;
                     WebGlass.DefaultBackgroundColor = System.Drawing.Color.Transparent;
-                    await WebGlass.EnsureCoreWebView2Async(env);
+                    UpdateLayout();
+                    // Con tope de tiempo: si el control no responde, se pasa al
+                    // clásico en vez de dejar la ventana en negro para siempre.
+                    var init = WebGlass.EnsureCoreWebView2Async(env);
+                    if (await Task.WhenAny(init, Task.Delay(20000)) != init)
+                        throw new TimeoutException("el control con transparencia no respondió en 20 s");
+                    await init;
                     _web = WebGlass;
                     _webElement = WebGlass;
                     _glassMode = true;
-                    WebGlass.Visibility = Visibility.Visible;
                     AppLogger.Info("WebView2: control con transparencia (cristal) inicializado.");
                 }
                 catch (Exception ex)
                 {
                     AppLogger.Error("Control con transparencia no disponible: " + ex.Message);
+                    try { WebGlass.Visibility = Visibility.Collapsed; } catch { }
+                    try { Root.Children.Remove(WebGlass); } catch { }
                     try { ((IDisposable)WebGlass).Dispose(); } catch { }
                 }
             }
@@ -203,14 +248,16 @@ public partial class MainWindow : Window
                 if (!nav.IsSuccess)
                 {
                     AppLogger.Error($"Navegación fallida: {nav.HttpStatusCode} ({nav.WebErrorStatus})");
-                    System.Windows.MessageBox.Show(
-                        "No se pudo cargar la interfaz.\n\n" +
-                        $"Error: {nav.WebErrorStatus} (HTTP {nav.HttpStatusCode}).\n" +
-                        "Cierra la app, borra %LocalAppData%\\TempPanel\\WebView2 e inténtalo de nuevo.",
-                        "TempPanel", MessageBoxButton.OK, MessageBoxImage.Error);
+                    if (!_uiCheck)
+                        System.Windows.MessageBox.Show(
+                            "No se pudo cargar la interfaz.\n\n" +
+                            $"Error: {nav.WebErrorStatus} (HTTP {nav.HttpStatusCode}).\n" +
+                            "Cierra la app, borra %LocalAppData%\\TempPanel\\WebView2 e inténtalo de nuevo.",
+                            "TempPanel", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
                 _webReady = true;
+                UiReady = true;
                 _monitor.IncludeAllSensors = _page == "sensores";
                 SendConfig();
                 _sensorTimer.Change(0, _config.RefreshMs);
@@ -223,9 +270,10 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             AppLogger.Error("InitWebView2: " + ex);
-            System.Windows.MessageBox.Show("No se pudo iniciar WebView2.\n\n" + ex.Message +
-                "\n\nInstala el runtime WebView2 desde:\nhttps://go.microsoft.com/fwlink/p/?LinkId=2124703",
-                "TempPanel", MessageBoxButton.OK, MessageBoxImage.Error);
+            if (!_uiCheck)
+                System.Windows.MessageBox.Show("No se pudo iniciar WebView2.\n\n" + ex.Message +
+                    "\n\nInstala el runtime WebView2 desde:\nhttps://go.microsoft.com/fwlink/p/?LinkId=2124703",
+                    "TempPanel", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 

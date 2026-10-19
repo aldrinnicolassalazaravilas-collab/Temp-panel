@@ -18,7 +18,7 @@ export const app = $state({
     refreshMs: 2000, cpuWarnTemp: 85, cpuCritTemp: 95, gpuWarnTemp: 80, gpuCritTemp: 90,
     preferredCpuSensor: "auto", unit: "C", startMinimized: false, startWithWindows: false,
     glass: false, batteryEnabled: true, batteryThreshold: 80, batteryRearm: 75, batterySound: true,
-    batteryMode: "popup", batteryFull: true, version: "2.5.0", autoCheckUpdates: false, firstRun: false,
+    batteryMode: "popup", batteryFull: true, version: "2.5.1", autoCheckUpdates: false, firstRun: false,
     miniSeries: "cpu,temp,bat,ram,gpu", miniExpanded: false
   },
   snap: null,
