@@ -23,10 +23,15 @@ catch { $rel = $null }
 
 if (-not $rel) {
   Write-Output "Creando release $tag..."
-  $notes = Get-Content "C:\tempanel\release-notes-v2.5.1.md" -Raw -Encoding UTF8
-  $body = @{ tag_name = $tag; name = "TempPanel $tag"; draft = $false; prerelease = $false;
+  # [string] fuerza un String real: en PS 5.1 Get-Content -Raw adjunta propiedades
+  # del proveedor y ConvertTo-Json serializaria {"value": ...} en vez del texto.
+  $notes = [string](Get-Content "C:\tempanel\release-notes-v2.5.1.md" -Raw -Encoding UTF8)
+  $json = @{ tag_name = $tag; name = "TempPanel $tag"; draft = $false; prerelease = $false;
     body = $notes } | ConvertTo-Json
-  $rel = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$owner/$repo/releases" -Headers $H -Body $body -ContentType "application/json" -TimeoutSec 30
+  # Enviar bytes UTF-8: con un string, PS 5.1 usa la codificación ANSI y los
+  # acentos rompen el JSON en el servidor ("Problems parsing JSON").
+  $payload = [Text.Encoding]::UTF8.GetBytes($json)
+  $rel = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$owner/$repo/releases" -Headers $H -Body $payload -ContentType "application/json" -TimeoutSec 30
 } else { Write-Output "Release $tag ya existe (id $($rel.id))" }
 
 # 2. Subir asset (borra el anterior con mismo nombre si existe)
