@@ -92,7 +92,7 @@ public partial class MiniWindow : Window
         LoadText.Text = snap.Cpu.TotalLoad.HasValue
             ? $"CPU {snap.Cpu.TotalLoad.Value:0.0} %" : "CPU —";
         BatText.Text = snap.Battery.Present && snap.Battery.Percent.HasValue
-            ? $"Bat {snap.Battery.Percent.Value:0} % · {snap.Battery.Status}" : "Bat —";
+            ? $"Bat {snap.Battery.Percent.Value:0.0} % · {snap.Battery.Status}" : "Bat —";
 
         RamText.Text = snap.Memory.PercentUsed.HasValue ? $"{snap.Memory.PercentUsed.Value:0.0} %"
             : snap.Memory.UsedMb.HasValue ? $"{snap.Memory.UsedMb.Value / 1024.0:0.0} GB" : "—";

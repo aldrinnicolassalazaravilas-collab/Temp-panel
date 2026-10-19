@@ -12,18 +12,28 @@
     <AssemblyCompany>TempPanel</AssemblyCompany>
     <AssemblyProduct>TempPanel</AssemblyProduct>
     <AssemblyDescription>Monitor de hardware en tiempo real</AssemblyDescription>
-    <AssemblyVersion>2.3.5.0</AssemblyVersion>
-    <FileVersion>2.3.5.0</FileVersion>
-    <Version>2.3.5</Version>
+    <AssemblyVersion>2.5.0.0</AssemblyVersion>
+    <FileVersion>2.5.0.0</FileVersion>
+    <Version>2.5.0</Version>
     <Copyright>Copyright © 2026 TempPanel</Copyright>
     <ApplicationManifest>Properties\app.manifest</ApplicationManifest>
     <ApplicationIcon>app.ico</ApplicationIcon>
     <!-- Evita consola: WinExe ya lo hace. Single-file autocontenido se activa en publish -->
+    <!-- Menos RAM: GC de estación de trabajo no concurrente (app de UI pequeña) -->
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <!-- Símbolos dentro del propio exe: rastro de errores con número de línea
+         y sin archivo .pdb suelto en la carpeta publicada. -->
+    <DebugType>embedded</DebugType>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.6" />
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+    <!-- 1.0.2957+ incluye WebView2CompositionControl (transparencia real en Win11) -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
   </ItemGroup>
 
   <ItemGroup>
@@ -31,6 +41,8 @@
     <Content Include="Frontend\**">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!-- Utillaje de desarrollo: nunca se distribuye con la app. -->
+    <Content Remove="Frontend\_preview.html" />
   </ItemGroup>
 
 </Project>

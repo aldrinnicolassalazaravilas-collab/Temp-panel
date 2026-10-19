@@ -1,8 +1,8 @@
-; TempPanel — Instalador Inno Setup
+﻿; TempPanel — Instalador Inno Setup
 ; Requiere: publish self-contained en ..\publish\win-x64
 
 #define MyAppName "TempPanel"
-#define MyAppVersion "2.3.5"
+#define MyAppVersion "2.5.0"
 #define MyAppPublisher "TempPanel"
 #define MyAppURL "https://github.com/temppanel/temppanel"
 #define MyAppExeName "TempPanel.exe"

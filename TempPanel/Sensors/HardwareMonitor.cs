@@ -41,6 +41,25 @@ public sealed class HardwareMonitor : IDisposable
     public int RefreshMs { get; set; } = 2000;
     public string PreferredCpuSensor { get; set; } = "auto";
 
+    /// <summary>
+    /// true = la lectura incluye la lista completa de sensores (tabla
+    /// "Todos los sensores"). Se activa solo cuando esa página está abierta:
+    /// evita construir y serializar ~120 objetos cada 2 s (menos RAM/CPU).
+    /// </summary>
+    public bool IncludeAllSensors { get; set; }
+
+    /// <summary>Última lectura de batería (para avisos, sin consultar WMI dos veces).</summary>
+    public BatteryData LastBattery { get; private set; } = new();
+
+    // Tendencia de carga medida sobre datos reales (observa, no predice).
+    private readonly BatteryTrend _batTrend = new();
+    // Caché de la tabla completa de sensores (se reconstruye por intervalos o
+    // cuando la página de sensores está abierta) y contadores del diagnóstico.
+    private List<SensorReading>? _cachedSensors;
+    private List<SensorOption> _cpuTempOptions = new();
+    private int _snapCount;
+    private int _diagCpuTempTotal, _diagCpuTempWith, _diagTotalSensors, _diagSensorsWith;
+
     public HardwareMonitor()
     {
         _computer = new Computer
@@ -78,6 +97,13 @@ public sealed class HardwareMonitor : IDisposable
         }
         catch { return false; }
     }
+
+    /// <summary>
+    /// Rango plausible de temperatura para hardware de PC (2–130 °C).
+    /// Descarta 0 y negativos que publican sensores ausentes: mejor
+    /// "No disponible" que un valor ficticio en pantalla.
+    /// </summary>
+    public static bool IsPlausibleTemp(double v) => v >= 2.0 && v <= 130.0;
 
     private static void EnsureStaticInfo()
     {
@@ -153,7 +179,23 @@ public sealed class HardwareMonitor : IDisposable
                 snap.ExtraTemps = vals;
             }
             catch (Exception ex) { AppLogger.Error("ReadExtraTemps: " + ex); }
-            try { snap.AllSensors = ReadAllSensors(); } catch (Exception ex) { AppLogger.Error("ReadAllSensors: " + ex); }
+            try
+            {
+                // La tabla completa solo se construye cuando hace falta:
+                //  - la página "Todos los sensores" está abierta, o
+                //  - toca refrescar el diagnóstico (cada 15 lecturas ~30 s).
+                _snapCount++;
+                bool wantFull = IncludeAllSensors;
+                bool needRefresh = wantFull || _diagTotalSensors == 0 || _snapCount % 15 == 0;
+                if (needRefresh)
+                {
+                    try { _cachedSensors = ReadAllSensors(); }
+                    catch (Exception ex) { AppLogger.Error("ReadAllSensors: " + ex); }
+                }
+                if (wantFull && _cachedSensors != null) snap.AllSensors = _cachedSensors;
+            }
+            catch (Exception ex) { AppLogger.Error("ReadAllSensors gate: " + ex); }
+            snap.SensorOptions = _cpuTempOptions;
             try { snap.Diagnostics = BuildDiagnostics(snap); } catch (Exception ex) { AppLogger.Error("Diagnostics: " + ex); }
 
             var now = DateTime.Now;
@@ -205,7 +247,8 @@ public sealed class HardwareMonitor : IDisposable
             switch (s.SensorType)
             {
                 case SensorType.Temperature:
-                    temps.Add((s.Identifier.ToString(), s.Name, v));
+                    // Solo lecturas plausibles: un 0 de sensor ausente no es una temperatura.
+                    if (IsPlausibleTemp(v)) temps.Add((s.Identifier.ToString(), s.Name, v));
                     break;
                 case SensorType.Load:
                     if (s.Name.Contains("Total", StringComparison.OrdinalIgnoreCase) || s.Name.Contains("CPU Total", StringComparison.OrdinalIgnoreCase))
@@ -222,6 +265,12 @@ public sealed class HardwareMonitor : IDisposable
                     break;
             }
         }
+
+        // Selector ligero de sensores de temperatura de CPU (siempre viaja:
+        // ~23 entradas cortas; la tabla completa solo si esa página está abierta).
+        _cpuTempOptions = temps
+            .Select(t => new SensorOption { Identifier = t.id, Name = t.name, Value = Math.Round(t.v, 1) })
+            .ToList();
 
         // Núcleos: "Core #N", "P-Core #N", "E-Core #N" — ordenados por número
         var coreTempList = temps
@@ -472,70 +521,40 @@ public sealed class HardwareMonitor : IDisposable
     private BatteryData ReadBattery()
     {
         var bat = new BatteryData();
-        try
-        {
-            var ps = System.Windows.Forms.SystemInformation.PowerStatus;
-            // BatteryLifePercent: 0..1 ; 255/1.0 puede indicar sin batería -> validar con flags
-            bool noneFlag = (ps.BatteryChargeStatus & BatteryChargeStatus.NoSystemBattery) != 0
-                         || ps.BatteryChargeStatus == BatteryChargeStatus.NoSystemBattery;
-            if (noneFlag)
-            {
-                bat.Present = false;
-                bat.Status = "Sin batería";
-                bat.Note = "No se detectó batería en este equipo.";
-                return bat;
-            }
-            bat.Present = true;
-            double pct = Math.Round(ps.BatteryLifePercent * 100, 0);
-            if (pct >= 0 && pct <= 100) bat.Percent = pct;
-
-            bool charging = (ps.BatteryChargeStatus & BatteryChargeStatus.Charging) != 0;
-            if (charging) bat.Status = "Cargando";
-            else if (pct >= 99) bat.Status = "Cargada";
-            else bat.Status = "Descargando";
-
-            try
-            {
-                bat.PowerLine = ps.PowerLineStatus switch
-                {
-                    PowerLineStatus.Online => "Conectado a la red",
-                    PowerLineStatus.Offline => "Con batería",
-                    _ => "Desconocido"
-                };
-            }
-            catch { bat.PowerLine = "Desconocido"; }
-        }
+        BatterySample sample;
+        try { sample = BatteryReader.Read(); }
         catch (Exception ex)
         {
-            bat.Present = false;
-            bat.Status = "Desconocido";
-            bat.Note = "No se pudo leer la batería: " + ex.Message;
-            AppLogger.Error("PowerStatus: " + ex.Message);
+            AppLogger.Error("BatteryReader: " + ex.Message);
+            sample = new BatterySample();
         }
 
-        // Capacidades vía WMI (pueden no existir -> null, nunca inventar)
-        try
-        {
-            using var searcher = new ManagementObjectSearcher("SELECT DesignCapacity, FullChargeCapacity, RemainingCapacity FROM BatteryFullChargedCapacity");
-            foreach (ManagementObject mo in searcher.Get())
-            {
-                bat.FullChargeCapacityMwh = ToNullableDouble(mo["FullChargeCapacity"]);
-                bat.RemainingCapacityMwh = ToNullableDouble(mo["RemainingCapacity"]);
-            }
-        }
-        catch { }try
-        {
-            using var s2 = new ManagementObjectSearcher("SELECT DesignCapacity FROM BatteryStaticData");
-            foreach (ManagementObject mo in s2.Get())
-            {
-                var d = ToNullableDouble(mo["DesignCapacity"]);
-                if (d.HasValue && d.Value > 0) { bat.DesignCapacityMwh = d; break; }
-            }
-        }
-        catch { }
+        bat.Present = sample.Present;
+        bat.Percent = sample.Percent;
+        bat.PercentSource = sample.PercentSource;
+        bat.Charging = sample.Charging;
+        bat.PowerLine = sample.PowerOnline.HasValue
+            ? (sample.PowerOnline.Value ? "Conectado a la red" : "Con batería")
+            : "Desconocido";
+        bat.FullChargeCapacityMwh = sample.FullChargeMwh;
+        bat.DesignCapacityMwh = sample.DesignMwh;
+        bat.RemainingCapacityMwh = sample.RemainingMwh;
+        bat.ChargeRateW = sample.ChargeRateW;
+        bat.DischargeRateW = sample.DischargeRateW;
+        bat.VoltageV = sample.VoltageV;
+        bat.RemainingMinutes = sample.RuntimeMinutes;
 
-        // Enriquecer con sensores LHM de batería (Energy/Level/Power/TimeSpan/Voltage).
-        // Si no existen, los campos quedan null: nunca se inventan.
+        if (!bat.Present)
+        {
+            bat.Status = "Sin batería";
+            bat.Note = "No se detectó batería en este equipo.";
+            LastBattery = bat;
+            return bat;
+        }
+
+        // Enriquecer con sensores LHM de batería SOLO lo que aún falte
+        // (no pisa lo medido por capacidades reales). Si no existen los
+        // sensores, los campos quedan null: nunca se inventan.
         try
         {
             var batHw = _computer.Hardware.FirstOrDefault(h => h.HardwareType == HardwareType.Battery);
@@ -546,43 +565,63 @@ public sealed class HardwareMonitor : IDisposable
                     if (!s.Value.HasValue) continue;
                     double v = s.Value.Value;
                     if (s.SensorType == SensorType.Energy && s.Name.Contains("Designed", StringComparison.OrdinalIgnoreCase))
-                        bat.DesignCapacityMwh ??= v;
+                        bat.DesignCapacityMwh ??= Math.Round(v, 0);
                     else if (s.SensorType == SensorType.Energy && s.Name.Contains("Fully-Charged", StringComparison.OrdinalIgnoreCase))
-                        bat.FullChargeCapacityMwh ??= v;
+                        bat.FullChargeCapacityMwh ??= Math.Round(v, 0);
                     else if (s.SensorType == SensorType.Energy && s.Name.Contains("Remaining Capacity", StringComparison.OrdinalIgnoreCase))
-                        bat.RemainingCapacityMwh ??= v;
+                        bat.RemainingCapacityMwh ??= Math.Round(v, 0);
                     else if (s.SensorType == SensorType.Level && s.Name.Contains("Charge Level", StringComparison.OrdinalIgnoreCase))
+                    {
                         bat.ChargeLevelPct = Math.Round(v, 1);
+                        // El nivel de LHM solo se usa si no hubo capacidades reales.
+                        if (bat.Percent == null && v is >= 0 and <= 100)
+                        {
+                            bat.Percent = bat.ChargeLevelPct;
+                            bat.PercentSource = "LibreHardwareMonitor (nivel de carga)";
+                        }
+                    }
+                    else if (s.SensorType == SensorType.Power && s.Name.Contains("Charge Rate", StringComparison.OrdinalIgnoreCase) && v > 0)
+                        bat.ChargeRateW ??= Math.Round(v, 1);
                     else if (s.SensorType == SensorType.Power && s.Name.Contains("Discharge Rate", StringComparison.OrdinalIgnoreCase) && v > 0)
-                        bat.DischargeRateW = Math.Round(v, 1);
+                        bat.DischargeRateW ??= Math.Round(v, 1);
                     else if (s.SensorType == SensorType.TimeSpan && s.Name.Contains("Remaining Time", StringComparison.OrdinalIgnoreCase) && v > 0)
-                        bat.RemainingMinutes = Math.Round(v / 60.0, 0);
+                        bat.RemainingMinutes ??= BatteryReader.SanitizeRuntime(v / 60.0);
                     else if (s.SensorType == SensorType.Voltage && bat.VoltageV == null)
                         bat.VoltageV = Math.Round(v, 2);
                 }
-                // Nivel preciso de LHM prevalece sobre el entero de PowerStatus
-                if (bat.ChargeLevelPct.HasValue && bat.ChargeLevelPct.Value is >= 0 and <= 100)
-                    bat.Percent = bat.ChargeLevelPct;
             }
         }
-        catch { }
+        catch (Exception ex) { AppLogger.Error("Batería LHM: " + ex.Message); }
 
+        // Coherencia de dirección: ver CoherentRates (los EC repiten la misma
+        // potencia en ambas columnas y se mostraría "cargando" al descargar).
+        (bat.ChargeRateW, bat.DischargeRateW) =
+            BatteryReader.CoherentRates(bat.Charging, bat.ChargeRateW, bat.DischargeRateW);
+
+        // Tendencia medida sobre lo observado en esta sesión (no predice).
+        bool plugged = bat.PowerLine == "Conectado a la red";
+        _batTrend.Add(DateTime.Now, bat.Percent, plugged);
+        bat.TrendPctPerHour = _batTrend.PctPerHour;
+        bat.Held = _batTrend.Held;
+        bat.HeldMinutes = _batTrend.HeldMinutes;
+
+        bat.Status = BatteryReader.StatusFor(sample.PowerOnline, bat.Charging, bat.Percent, bat.Held, bat.Present);
         // Temperatura de batería: Windows no la expone de forma estándar -> null + nota
         bat.TemperatureC = null;
-        if (bat.Present)
-            bat.Note = "La temperatura y los ciclos de batería no están expuestos por Windows; no se muestran para evitar datos ficticios.";
+        bat.Note = BuildBatteryNote(bat);
+        LastBattery = bat;
         return bat;
     }
 
-    private static double? ToNullableDouble(object? o)
+    /// <summary>Nota honesta: fuentes reales usadas y qué no expone el sistema.</summary>
+    private static string BuildBatteryNote(BatteryData b)
     {
-        if (o == null) return null;
-        try
-        {
-            double d = Convert.ToDouble(o);
-            return double.IsNaN(d) || double.IsInfinity(d) ? null : d;
-        }
-        catch { return null; }
+        var parts = new List<string>();
+        if (!string.IsNullOrEmpty(b.PercentSource)) parts.Add("Nivel: " + b.PercentSource + ".");
+        parts.Add("La temperatura y los ciclos de batería no están expuestos por Windows; no se muestran para evitar datos ficticios.");
+        if (b.Held && b.HeldMinutes.HasValue)
+            parts.Add($"Enchufada y sin cambios desde hace {b.HeldMinutes.Value:0} min: suele ser el modo conservación del portátil, que limita la carga para cuidar la batería.");
+        return string.Join(" ", parts);
     }
 
     // ---------- Ventiladores ----------
@@ -656,23 +695,16 @@ public sealed class HardwareMonitor : IDisposable
     // ---------- Diagnóstico de detección ----------
     private DetectionDiagnostics BuildDiagnostics(Snapshot snap)
     {
-        int cpuTotal = 0, cpuWith = 0;
-        foreach (var s in snap.AllSensors)
-        {
-            if (s.HardwareType == "Cpu" && s.Type == "Temperature")
-            {
-                cpuTotal++;
-                if (s.Value.HasValue) cpuWith++;
-            }
-        }
+        // Contadores de la última lectura completa (no dependen de que la tabla
+        // completa viaje en este snapshot).
         var diag = new DetectionDiagnostics
         {
             IsAdmin = IsRunningAsAdmin(),
             HvciEnabled = IsHvciEnabled(),
-            CpuTempSensors = cpuTotal,
-            CpuTempWithValue = cpuWith,
-            TotalSensors = snap.AllSensors.Count,
-            SensorsWithValue = snap.AllSensors.Count(s => s.Value.HasValue),
+            CpuTempSensors = _diagCpuTempTotal,
+            CpuTempWithValue = _diagCpuTempWith,
+            TotalSensors = _diagTotalSensors,
+            SensorsWithValue = _diagSensorsWith,
             DriverBlocked = CheckDriverBlocked(),
             PawnIoInstalled = _pawnIoInstalled.GetValueOrDefault(),
             PawnIoVersion = _pawnIoVersion
@@ -913,7 +945,20 @@ public sealed class HardwareMonitor : IDisposable
             foreach (var sub in hw.SubHardware)
                 AddSensors(sub, list);
         }
-        return list.OrderBy(s => s.Hardware).ThenBy(s => s.Type).ThenBy(s => s.Name).ToList();
+        var ordered = list.OrderBy(s => s.Hardware).ThenBy(s => s.Type).ThenBy(s => s.Name).ToList();
+        // Contadores del diagnóstico (se mantienen aunque la tabla no se envíe).
+        _diagCpuTempTotal = 0; _diagCpuTempWith = 0;
+        foreach (var s in ordered)
+        {
+            if (s.HardwareType == "Cpu" && s.Type == "Temperature")
+            {
+                _diagCpuTempTotal++;
+                if (s.Value.HasValue) _diagCpuTempWith++;
+            }
+        }
+        _diagTotalSensors = ordered.Count;
+        _diagSensorsWith = ordered.Count(s => s.Value.HasValue);
+        return ordered;
     }
 
     private static void AddSensors(IHardware hw, List<SensorReading> list)

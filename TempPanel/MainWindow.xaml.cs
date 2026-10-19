@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
@@ -30,6 +30,19 @@ public partial class MainWindow : Window
     private bool _webReady;
     private bool _allowClose;
     private MiniWindow? _mini;
+
+    // --- v2.5.0: cristal (transparencia real), suspensión de WebView2 y RAM ---
+    private readonly Process _self = Process.GetCurrentProcess();
+    private Microsoft.Web.WebView2.Wpf.IWebView2? _web;      // control activo (cristal o clásico)
+    private FrameworkElement? _webElement;
+    private CoreWebView2? _core;
+    private bool _glassMode;
+    private bool _webSuspended;
+    private bool _webVisible = true;
+    private string _page = "resumen";
+    // Franja superior arrastrable (barra de la interfaz) y zona de botones.
+    private const double CaptionHeight = 44;
+    private const double CaptionButtonsWidth = 150;
 
     public MainWindow()
     {
@@ -74,7 +87,12 @@ public partial class MainWindow : Window
         // cada 10 minutos recreando el lector. Barato y honesto.
         _recycleTimer = new System.Threading.Timer(_ => MaybeRecycleMonitor(), null, Timeout.Infinite, Timeout.Infinite);
 
-        Loaded += async (_, __) => await InitWebAsync();
+        Loaded += OnLoadedWindow;
+        StateChanged += (_, __) =>
+        {
+            // Minimizada = fuera de vista: se suspende el motor WebView2 (ahorro de RAM).
+            _ = SetWebVisibleAsync(WindowState != WindowState.Minimized && IsVisible);
+        };
         Closing += OnClosingWindow;
         Closed += (_, __) => Cleanup();
 
@@ -84,6 +102,26 @@ public partial class MainWindow : Window
             Hide();
         }
         StartupManager.Apply(_config.StartWithWindows);
+    }
+
+    // ---------------- Arranque de la ventana ----------------
+    private async void OnLoadedWindow(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            // Cristal acrílico de Windows 11 + esquinas redondeadas (si el
+            // sistema lo soporta). Si no, la ventana queda oscura y opaca.
+            bool acrylic = WindowFx.SupportsGlass() && WindowFx.ApplyAcrylic(this);
+            AppLogger.Info("Cristal: " + (acrylic ? "acrílico aplicado" : "no disponible (tema oscuro sólido)"));
+            if (acrylic)
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                if (hwnd != IntPtr.Zero)
+                    System.Windows.Interop.HwndSource.FromHwnd(hwnd)?.AddHook(WndProcHook);
+            }
+        }
+        catch (Exception ex) { AppLogger.Error("WindowFx: " + ex.Message); }
+        await InitWebAsync();
     }
 
     // ---------------- WebView2 ----------------
@@ -96,11 +134,57 @@ public partial class MainWindow : Window
                 "TempPanel", "WebView2",
                 UpdateService.Current().ToString()); // perfil por versión: evita bloqueos de perfiles viejos
             Directory.CreateDirectory(userData);
-            var env = await CoreWebView2Environment.CreateAsync(null, userData);
-            await Web.EnsureCoreWebView2Async(env);
 
-            Web.CoreWebView2.Settings.AreDevToolsEnabled = false;
-            Web.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
+            // v2.5.0 — menos RAM: caché de disco pequeña, sin servicios de fondo
+            // que la app no usa y techo de memoria del motor JS.
+            var options = new CoreWebView2EnvironmentOptions
+            {
+                AdditionalBrowserArguments =
+                    "--disable-features=msSmartScreenProtection,msEdgeShoppingFeatures " +
+                    "--disable-component-update --disk-cache-size=8388608 " +
+                    "--js-flags=--max-old-space-size=64"
+            };
+            var env = await CoreWebView2Environment.CreateAsync(null, userData, options);
+
+            // Windows 11: control con transparencia real (el acrílico de DWM
+            // se ve a través de la interfaz). Si algo falla, cae al control
+            // clásico opaco y la app sigue funcionando igual.
+            if (WindowFx.SupportsGlass())
+            {
+                try
+                {
+                    WebGlass.DefaultBackgroundColor = System.Drawing.Color.Transparent;
+                    await WebGlass.EnsureCoreWebView2Async(env);
+                    _web = WebGlass;
+                    _webElement = WebGlass;
+                    _glassMode = true;
+                    WebGlass.Visibility = Visibility.Visible;
+                    AppLogger.Info("WebView2: control con transparencia (cristal) inicializado.");
+                }
+                catch (Exception ex)
+                {
+                    AppLogger.Error("Control con transparencia no disponible: " + ex.Message);
+                    try { ((IDisposable)WebGlass).Dispose(); } catch { }
+                }
+            }
+            if (_web == null)
+            {
+                await Web.EnsureCoreWebView2Async(env);
+                _web = Web;
+                _webElement = Web;
+                // Sin cristal: fondo opaco consistente (nada de ventana "fantasma").
+                Root.Background = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(0x0B, 0x12, 0x20));
+                Web.Visibility = Visibility.Visible;
+                AppLogger.Info("WebView2: control clásico (opaco) inicializado.");
+            }
+            _core = _web.CoreWebView2;
+
+            _core.Settings.AreDevToolsEnabled = false;
+            _core.Settings.AreDefaultContextMenusEnabled = false;
+            // Arrastre nativo de la barra superior también en el control clásico
+            // (en modo cristal lo resuelve el propio Windows con la franja superior).
+            try { _core.Settings.IsNonClientRegionSupportEnabled = true; } catch { }
 
             string wwwroot = FindWwwRoot();
             if (!File.Exists(Path.Combine(wwwroot, "index.html")))
@@ -111,10 +195,10 @@ public partial class MainWindow : Window
                     MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
-            Web.CoreWebView2.SetVirtualHostNameToFolderMapping(
+            _core.SetVirtualHostNameToFolderMapping(
                 "temppanel.local", wwwroot, CoreWebView2HostResourceAccessKind.Allow);
-            Web.CoreWebView2.WebMessageReceived += OnWebMessage;
-            Web.NavigationCompleted += (_, nav) =>
+            _core.WebMessageReceived += OnWebMessage;
+            _core.NavigationCompleted += (_, nav) =>
             {
                 if (!nav.IsSuccess)
                 {
@@ -127,13 +211,14 @@ public partial class MainWindow : Window
                     return;
                 }
                 _webReady = true;
+                _monitor.IncludeAllSensors = _page == "sensores";
                 SendConfig();
                 _sensorTimer.Change(0, _config.RefreshMs);
                 _batteryTimer.Change(TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
                 _recycleTimer.Change(TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(10));
                 if (_config.AutoCheckUpdates) _ = CheckUpdatesAsync(manual: false);
             };
-            Web.Source = new Uri("https://temppanel.local/index.html");
+            _web.Source = new Uri("https://temppanel.local/index.html");
         }
         catch (Exception ex)
         {
@@ -142,6 +227,71 @@ public partial class MainWindow : Window
                 "\n\nInstala el runtime WebView2 desde:\nhttps://go.microsoft.com/fwlink/p/?LinkId=2124703",
                 "TempPanel", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    // ---------------- Cristal + ahorro de RAM (v2.5.0) ----------------
+
+    /// <summary>Arrastre nativo de la franja superior (modo sin marco + cristal).</summary>
+    private IntPtr WndProcHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const int WM_NCHITTEST = 0x0084;
+        const int HTCAPTION = 2;
+        if (msg == WM_NCHITTEST && _glassMode)
+        {
+            try
+            {
+                long lp = lParam.ToInt64();
+                double sx = (short)(lp & 0xFFFF);
+                double sy = (short)((lp >> 16) & 0xFFFF);
+                var p = PointFromScreen(new System.Windows.Point(sx, sy));
+                const double border = 8; // deja el borde para redimensionar (WindowChrome)
+                bool inside = p.X > border && p.Y > border &&
+                              p.X < ActualWidth - border && p.Y < ActualHeight - border;
+                if (inside && p.Y < CaptionHeight && p.X < ActualWidth - CaptionButtonsWidth)
+                {
+                    handled = true;
+                    return (IntPtr)HTCAPTION;
+                }
+            }
+            catch { }
+        }
+        return IntPtr.Zero;
+    }
+
+    /// <summary>
+    /// Suspende el motor WebView2 cuando la ventana está oculta o minimizada
+    /// (bandeja o mini ventana) y lo reanuda al volver. Además baja el objetivo
+    /// de memoria del motor. Ahorro real de RAM sin perder lecturas: los
+    /// sensores siguen muestreando igual.
+    /// </summary>
+    private async Task SetWebVisibleAsync(bool visible)
+    {
+        _webVisible = visible;
+        try
+        {
+            if (_webElement == null || _core == null) return;
+            if (visible)
+            {
+                if (_webSuspended)
+                {
+                    try { _core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Normal; } catch { }
+                    try { _core.Resume(); } catch (Exception ex) { AppLogger.Error("Resume: " + ex.Message); }
+                    _webSuspended = false;
+                }
+                _webElement.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                _webElement.Visibility = Visibility.Collapsed;
+                try { _core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low; } catch { }
+                if (!_webSuspended)
+                {
+                    try { _webSuspended = await _core.TrySuspendAsync(); }
+                    catch (Exception ex) { AppLogger.Error("TrySuspend: " + ex.Message); }
+                }
+            }
+        }
+        catch (Exception ex) { AppLogger.Error("SetWebVisible: " + ex.Message); }
     }
 
     private static string FindWwwRoot()
@@ -294,6 +444,22 @@ public partial class MainWindow : Window
                     _config.Save();
                     SendConfig();
                     break;
+                // --- v2.5.0 ---
+                case "view":
+                    // Página visible: la tabla completa de sensores solo se
+                    // construye y envía cuando hace falta (menos RAM y CPU).
+                    if (doc.RootElement.TryGetProperty("page", out var pgEl))
+                    {
+                        _page = pgEl.GetString() ?? "resumen";
+                        _monitor.IncludeAllSensors = _page == "sensores";
+                        if (_page == "sensores") PushSnapshot();
+                    }
+                    break;
+                case "winMin": WindowState = WindowState.Minimized; break;
+                case "winMax":
+                    WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+                    break;
+                case "winClose": Close(); break;
             }
         }
         catch (Exception ex) { AppLogger.Error("WebMessage: " + ex.Message); }
@@ -342,12 +508,23 @@ public partial class MainWindow : Window
         try
         {
             Sensors.Snapshot snap;
-            lock (_monLock) snap = _monitor.GetSnapshot();
+            lock (_monLock)
+            {
+                _monitor.IncludeAllSensors = _page == "sensores";
+                snap = _monitor.GetSnapshot();
+            }
             if (snap.Cpu.PackageTemp.HasValue) _everHadCpuTemp = true;
+            try
+            {
+                // Memoria real del proceso: visible en Ayuda (transparencia total).
+                _self.Refresh();
+                snap.Meta.AppMemoryMb = Math.Round(_self.WorkingSet64 / 1048576.0, 1);
+            }
+            catch { }
             string json = JsonSerializer.Serialize(new { type = "snapshot", data = snap }, _jsonOpts);
             Dispatcher.BeginInvoke(() =>
             {
-                try { Web.CoreWebView2?.PostWebMessageAsJson(json); }
+                try { _core?.PostWebMessageAsJson(json); }
                 catch (Exception ex) { AppLogger.Error("PostMessage: " + ex.Message); }
                 try { UpdateTray(snap); } catch { }
                 try { _mini?.Update(snap); } catch { }
@@ -384,12 +561,13 @@ public partial class MainWindow : Window
                     firstRun = _config.FirstRun,
                     miniSeries = _config.MiniSeries,
                     miniExpanded = _config.MiniExpanded,
+                    glass = _glassMode,
                     version = UpdateService.Current().ToString()
                 }
             }, _jsonOpts);
             Dispatcher.BeginInvoke(() =>
             {
-                try { Web.CoreWebView2?.PostWebMessageAsJson(json); }
+                try { _core?.PostWebMessageAsJson(json); }
                 catch { }
             });
         }
@@ -403,7 +581,7 @@ public partial class MainWindow : Window
         {
             string cpu = snap.Cpu.PackageTemp.HasValue ? $"{snap.Cpu.PackageTemp.Value:0.0}°" : "—";
             string load = snap.Cpu.TotalLoad.HasValue ? $"{snap.Cpu.TotalLoad.Value:0}%" : "—";
-            string bat = snap.Battery.Present && snap.Battery.Percent.HasValue ? $"{snap.Battery.Percent.Value:0}%" : "—";
+            string bat = snap.Battery.Present && snap.Battery.Percent.HasValue ? $"{snap.Battery.Percent.Value:0.0}%" : "—";
             string tip = $"TempPanel · CPU {cpu} · {load} · Bat {bat}";
             if (tip.Length > 63) tip = tip.Substring(0, 63);
             _tray.Text = tip;
@@ -436,12 +614,13 @@ public partial class MainWindow : Window
     {
         try
         {
-            var ps = System.Windows.Forms.SystemInformation.PowerStatus;
-            bool none = (ps.BatteryChargeStatus & System.Windows.Forms.BatteryChargeStatus.NoSystemBattery) != 0;
-            if (none) return; // sin batería: jamás alertar
-            double pct = Math.Round(ps.BatteryLifePercent * 100, 1);
+            // Se reutiliza la última lectura del monitor (ya usa capacidades
+            // reales de root\wmi): sin duplicar consultas WMI.
+            BatteryData bat;
+            lock (_monLock) bat = _monitor.LastBattery;
+            if (!bat.Present || bat.Percent is not double pct) return;
             if (pct < 0 || pct > 100) return;
-            bool charging = (ps.BatteryChargeStatus & System.Windows.Forms.BatteryChargeStatus.Charging) != 0;
+            bool charging = bat.Charging ?? false;
             _batteryService.Evaluate(pct, charging);
             _fullService.Evaluate(pct, charging);
         }
@@ -515,7 +694,7 @@ public partial class MainWindow : Window
             }, _jsonOpts);
             Dispatcher.BeginInvoke(() =>
             {
-                try { Web.CoreWebView2?.PostWebMessageAsJson(json); }
+                try { _core?.PostWebMessageAsJson(json); }
                 catch { }
             });
         });
@@ -561,7 +740,7 @@ public partial class MainWindow : Window
             }, _jsonOpts);
             Dispatcher.BeginInvoke(() =>
             {
-                try { Web.CoreWebView2?.PostWebMessageAsJson(json); }
+                try { _core?.PostWebMessageAsJson(json); }
                 catch { }
             });
         }
@@ -646,7 +825,7 @@ public partial class MainWindow : Window
             }, _jsonOpts);
             Dispatcher.BeginInvoke(() =>
             {
-                try { Web.CoreWebView2?.PostWebMessageAsJson(json); }
+                try { _core?.PostWebMessageAsJson(json); }
                 catch { }
             });
         }
@@ -660,6 +839,7 @@ public partial class MainWindow : Window
         // Minimizar a la bandeja en lugar de cerrar
         e.Cancel = true;
         Hide();
+        _ = SetWebVisibleAsync(false); // libera RAM del motor de interfaz
         _tray.ShowBalloonTip(4000, "TempPanel", "TempPanel sigue ejecutándose en la bandeja del sistema.", System.Windows.Forms.ToolTipIcon.Info);
     }
 
@@ -673,6 +853,7 @@ public partial class MainWindow : Window
         Show();
         WindowState = WindowState.Normal;
         Activate();
+        _ = SetWebVisibleAsync(true); // reanuda el motor de interfaz
     }
 
     private void OpenMini()
@@ -691,6 +872,7 @@ public partial class MainWindow : Window
                 _mini.Activate();
             }
             Hide(); // la principal se esconde; la mini queda fija encima
+            _ = SetWebVisibleAsync(false); // la mini es nativa: no necesita el motor grande
         }
         catch (Exception ex) { AppLogger.Error("OpenMini: " + ex.Message); }
     }

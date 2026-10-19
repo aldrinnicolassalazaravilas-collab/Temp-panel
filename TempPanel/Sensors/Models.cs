@@ -99,21 +99,43 @@ public sealed class BatteryData
 {
     public bool Present { get; set; }
     public double? Percent { get; set; }
-    // Estado textual: "Cargando", "Descargando", "Cargada", "Sin batería", "Desconocido"
+    // Estado textual: "Cargando", "Cargando · retenida por el equipo",
+    // "Conectada · sin cargar", "Cargada (en red)", "Descargando", "Sin batería"
     public string Status { get; set; } = "Desconocido";
+    // Estado real de carga (root\wmi BatteryStatus): null = no expuesto.
+    public bool? Charging { get; set; }
+    // Fuente del nivel mostrado: capacidades reales, Win32_Battery, PowerStatus o LHM.
+    public string PercentSource { get; set; } = "";
     public double? DesignCapacityMwh { get; set; }
     public double? FullChargeCapacityMwh { get; set; }
     public double? RemainingCapacityMwh { get; set; }
     // Nivel preciso y descarga, solo si LibreHardwareMonitor los expone (pueden faltar).
     public double? ChargeLevelPct { get; set; }
     public double? DischargeRateW { get; set; }
+    public double? ChargeRateW { get; set; }
     public double? RemainingMinutes { get; set; }
     public double? VoltageV { get; set; }
+    // Tendencia medida (no predicha): %/hora observado y "nivel retenido".
+    public double? TrendPctPerHour { get; set; }
+    public bool Held { get; set; }
+    public double? HeldMinutes { get; set; }
     // Alimentación externa: "Conectado a la red", "Con batería" o "Desconocido"
     public string PowerLine { get; set; } = "Desconocido";
     // Temperatura SOLO si existe lectura real; en la práctica Windows no la expone -> null
     public double? TemperatureC { get; set; }
     public string? Note { get; set; }
+}
+
+/// <summary>
+/// Entrada ligera para el selector de sensor de temperatura de CPU en
+/// Configuración: se envía siempre (23 entradas cortas) aunque la lista
+/// completa de sensores no viaje en esta lectura (ahorro de RAM/CPU).
+/// </summary>
+public sealed class SensorOption
+{
+    public string Identifier { get; set; } = "";
+    public string Name { get; set; } = "";
+    public double? Value { get; set; }
 }
 
 public sealed class FanData
@@ -159,6 +181,8 @@ public sealed class SystemMeta
     public string PreferredCpuSensor { get; set; } = "auto";
     // Arranque del sistema (hora local legible).
     public string BootTimeLocal { get; set; } = "";
+    // Memoria de trabajo del propio proceso (MB) — visible en Ayuda.
+    public double? AppMemoryMb { get; set; }
 }
 
 public sealed class Snapshot
@@ -176,6 +200,9 @@ public sealed class Snapshot
     public List<double?> ExtraTemps { get; set; } = new();
     public List<string> ExtraTempNames { get; set; } = new();
     public List<SensorReading> AllSensors { get; set; } = new();
+    // Lista ligera (id + nombre + valor) para el selector de sensor de CPU:
+    // viaja en cada lectura aunque la tabla completa no se envíe.
+    public List<SensorOption> SensorOptions { get; set; } = new();
     public SystemMeta Meta { get; set; } = new();
     public List<string> Warnings { get; set; } = new();
 }

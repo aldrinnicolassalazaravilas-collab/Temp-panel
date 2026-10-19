@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows;
@@ -37,7 +37,7 @@ public partial class App : System.Windows.Application
             AppLogger.Error("DispatcherException: " + ex.Exception);
             ex.Handled = true;
         };
-        AppLogger.Info("TempPanel iniciado v2.3.5");
+        AppLogger.Info("TempPanel iniciado v2.5.0");
 
         try { _appMutex = new System.Threading.Mutex(true, "TempPanelAppMutex"); }
         catch (Exception ex) { AppLogger.Error("Mutex: " + ex.Message); }
@@ -125,7 +125,7 @@ public partial class App : System.Windows.Application
     {
         try
         {
-            using var monitor = new HardwareMonitor();
+            using var monitor = new HardwareMonitor { IncludeAllSensors = true };
             var snap = monitor.GetSnapshot();
             string json = JsonSerializer.Serialize(snap, new JsonSerializerOptions { WriteIndented = true });
             string outFile = Path.Combine(Path.GetTempPath(), "temppanel-selftest.json");

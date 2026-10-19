@@ -1,18 +1,30 @@
-# Limitaciones conocidas — TempPanel 2.3.5
+# Limitaciones conocidas — TempPanel 2.5.0
 
-Verificadas en Lenovo IdeaPad Slim 3 15IRH10 (i7-13620H, 24 GB, Intel UHD).
+Verificadas en Lenovo IdeaPad Slim 3 15IRH10 (i7-13620H, 24 GB, Intel UHD)
+con Windows 11 Pro (build 26200).
 
 1. **Temperaturas de CPU (RESUELTO 2026-10-16)**: LHM 0.9.x lee el procesador SOLO
    mediante el driver **PawnIO** (ya no usa WinRing0). Con PawnIO 2.2.0 instalado
    + app elevada: 23/23 temperaturas con valor, estado `ok`. Sin PawnIO no hay
    lecturas con ni sin admin. La app lo detecta y lo explica en Ayuda.
+   Desde 2.5.0 se descartan las lecturas imposibles (≤ 2 °C o > 130 °C) que
+   algunos drivers devuelven como 0/negativas: se tratan como «No disponible».
 2. **GPU integrada sin temperatura independiente**: la Intel UHD no publica
    sensor térmico propio. Se muestran carga y frecuencia reales.
 3. **Ventiladores sin RPM / almacenamiento sin sensor**: el EC del IdeaPad no
    publica RPM ni el NVMe expone temperatura vía LHM en este modo. Mensaje honesto.
-4. **Batería**: % preciso (70–59 % verificado descargando), estado, alimentación
-   externa, capacidades (50000/52550 mWh), descarga (30–35 W), autonomía y tensión
-   verificados. Temperatura y ciclos: no expuestos por Windows; no se muestran.
+4. **Batería (MEJORADA en 2.5.0)**: nivel con 1 decimal desde las capacidades
+   reales del firmware (`root\wmi`): p. ej. 92.9 % = 49040/52800 mWh, en vez del
+   entero 92 % que da `Win32_Battery`. Estado de carga real desde
+   `BatteryStatus` (Charging / PowerOnline), que sí distingue «cargando» aunque
+   `Win32_Battery` diga «sin cargar» (2). Verificado: diseño 50000 mWh,
+   capacidad completa 52800 mWh, carga a ~18–22 W con el nivel subiendo.
+   Los centinelas de Windows (`EstimatedRunTime` = 71582788 → «desconocido») se
+   filtran y quedan «No disponible» en vez de mostrarse como autonomía falsa.
+   Si el portátil **retiene** el nivel (modo conservación ~80 %), la app lo dice
+   tal cual («Cargando · retenida por el equipo») y mide la tendencia observada
+   en lugar de fingir que sube. Temperatura y ciclos: no expuestos por Windows;
+   no se muestran.
 5. **WebView2 Runtime**: necesario; preinstalado en la mayoría de equipos.
 6. **Aviso de SmartScreen**: el instalador no está firmado con un certificado de
    pago, así que al abrirlo desde el navegador puede aparecer «Windows protegió
@@ -25,11 +37,19 @@ Verificadas en Lenovo IdeaPad Slim 3 15IRH10 (i7-13620H, 24 GB, Intel UHD).
    botones para añadir o quitar una exclusión **solo de las rutas de TempPanel**
    (carpeta instalada + `TempPanel-Setup-*.exe`). Reversible; no desactiva nada.
 8. **Historial**: solo en memoria (máx. 900 puntos). CSV siempre en °C.
-9. **SO probado**: Windows 10 Pro x64 sobre el hardware objetivo. Compatible con
-   Windows 11 x64 sin cambios (misma API).
-10. **Consumo**: ~260 MB de conjunto de trabajo con GUI abierta (autocontenida +
-    WebView2); minimizada el motor sigue muestreando cada 2 s por diseño.
-    Pausar congela gráficas e historial sin detener la lectura.
+9. **SO probado**: Windows 11 Pro (build 26200) en el hardware objetivo.
+   Compatible con Windows 10 x64 y Windows 11: en Windows 10 (o si el cristal
+   acrílico no está disponible) la app usa el tema oscuro sólido, con las
+   mismas funciones. El cristal translúcido y las esquinas redondeadas son
+   característica de Windows 11.
+10. **Consumo (MEJORADO en 2.5.0)**: con la GUI abierta el conjunto de trabajo
+    depende del sistema (autocontenida + WebView2) y se ve en
+    **Resumen → Sistema → «Memoria de la app»**. Al minimizar, ocultar a la
+    bandeja o abrir la mini ventana, el motor WebView2 se **suspende**
+    (CPU en reposo y memoria liberada) mientras los sensores siguen
+    muestreándose cada 2 s. La lista completa de sensores solo se lee cuando
+    «Todos los sensores» está a la vista. Pausar congela gráficas e historial
+    sin detener la lectura.
 11. **Almacenamiento**: `MSStorageDriver_FailurePredictData` sin instancias y
     `Get-StorageReliabilityCounter` no disponible en este equipo; no hay fuente
     de temperatura de disco sin drivers de terceros.
