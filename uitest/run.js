@@ -132,14 +132,29 @@ function check(name, ok) {
   send('config', {
     refreshMs: 2000, cpuWarnTemp: 85, cpuCritTemp: 95, gpuWarnTemp: 80, gpuCritTemp: 90,
     preferredCpuSensor: 'auto', unit: 'C', glass: true, miniSeries: 'cpu,temp,bat,ram,gpu',
-    miniExpanded: false, firstRun: true, version: '2.5.0'
+    miniExpanded: false, firstRun: true, version: '3.0.0',
+    adaptivePerf: true, hotkeyEnabled: true, taskbarBadge: true, effectiveMs: 2000, perf: 'normal',
+    os: {
+      name: 'Windows 11 24H2', build: 26200, win11: true, accent: '#f472b6', theme: 'light',
+      highContrast: true, powerSaver: false, hotkey: true, glass: true
+    }
   });
   for (let i = 0; i < 5; i++) send('snapshot', makeSnap(i));
   await flush(120);
 
   check('modo cristal activo', doc.body.className.includes('glass') && !doc.body.className.includes('no-glass'));
+  check('v3: alto contraste aplicado (body.hc)', doc.body.classList.contains('hc'));
+  check('v3: acento de Windows en variable CSS',
+    doc.documentElement.style.getPropertyValue('--os-accent') === '#f472b6');
+  check('v3: modo de rendimiento expuesto', doc.body.dataset.perf === 'normal');
   check('barra de título con la página', txtOf('#tb-page') === 'Resumen');
   check('botones de ventana', !!doc.getElementById('win-min') && !!doc.getElementById('win-max') && !!doc.getElementById('win-close'));
+  send('hover', { id: 'win-max' });
+  await flush(40);
+  check('v3: hover nativo del maximizar', doc.getElementById('win-max').classList.contains('os-hover'));
+  send('hover', { id: null });
+  await flush(40);
+  check('v3: hover nativo se retira', !doc.getElementById('win-max').classList.contains('os-hover'));
   check('navegación con 10 páginas', doc.querySelectorAll('.nav-btn').length === 10);
   check('resumen: temperatura CPU', has('#summary-cards', '58.7'));
   check('resumen: medidor SVG', !!doc.querySelector('#summary-cards svg.gauge path.arc'));
@@ -149,6 +164,22 @@ function check(name, ok) {
   check('resumen: memoria de la app', has('#page-resumen', '168.4'));
   check('resumen: estadísticas reales', has('#page-resumen', 'lecturas') || has('#page-resumen', 'Mín:'));
   check('cristal: transparencia en variable CSS', css.includes('--panel-a'));
+
+  // ---- v3.0.0: rendimiento adaptativo (gobernador) ----
+  send('config', { perf: 'background', effectiveMs: 3000 });
+  await flush(60);
+  check('v3: chip de rendimiento (segundo plano)', has('#perf-chip', 'Segundo plano'));
+  send('snapshot', makeSnap(4));
+  await flush(60);
+  check('v3: ritmo efectivo mostrado', has('#conn-text', 'cada 3 s'));
+  send('config', { perf: 'normal', effectiveMs: 2000 });
+  await flush(60);
+  check('v3: chip desaparece en primer plano', !doc.getElementById('perf-chip'));
+
+  // ---- v3.0.0: navegación desde la bandeja (mensaje nativo) ----
+  send('navigate', { page: 'cpu' });
+  await flush(60);
+  check('v3: navegación desde la bandeja', txtOf('#tb-page') === 'CPU');
 
   // ---- CPU ----
   clickPage('cpu');
@@ -183,6 +214,18 @@ function check(name, ok) {
   check('batería: estado real de carga', has('#page-bateria', 'Cargando por red'));
   check('batería: flujo de carga visible', !!doc.querySelector('#page-bateria .flow'));
 
+  // ---- v3.0.0: equipo sin batería (sobremesa): se explica, no se inventa ----
+  const desk = makeSnap(0);
+  desk.battery = { present: false, percent: null, charging: null, status: 'No disponible', note: 'sin batería' };
+  send('snapshot', desk);
+  await flush(80);
+  clickPage('bateria');
+  await flush(60);
+  check('v3: sin batería se explica', has('#page-bateria', 'no expone una batería'));
+  clickPage('resumen');
+  await flush(60);
+  check('v3: resumen sin batería', has('#summary-cards', 'no expone batería'));
+
   // ---- Refrigeración ----
   clickPage('refrigeracion');
   await flush(80);
@@ -196,6 +239,22 @@ function check(name, ok) {
   const th = Array.from(doc.querySelectorAll('#sensor-table thead th')).find((t) => t.textContent.includes('Valor'));
   if (th) { th.click(); await flush(60); }
   check('sensores: orden por Valor', has('#sensor-table thead', '▲') || has('#sensor-table thead', '▼'));
+
+  // ---- v3.0.0: virtualización con muchos sensores ----
+  const big = makeSnap(4);
+  big.allSensors = Array.from({ length: 400 }, (_, i) => ({
+    hardware: 'CPU', hardwareType: 'Cpu', type: 'Temperature',
+    name: 'Sensor ' + i, identifier: 'id' + i, value: i, min: 0, max: 100, unit: '°C'
+  }));
+  send('snapshot', big);
+  await flush(80);
+  check('v3: contador con 400 sensores', has('#sensor-count', '400 / 400'));
+  check('v3: filas virtualizadas (<100)', doc.querySelectorAll('#sensor-table tbody tr.row').length < 100);
+  const wrap = doc.getElementById('sensor-table').parentElement;
+  wrap.scrollTop = 34 * 300;
+  wrap.dispatchEvent(new dom.window.Event('scroll'));
+  await flush(80);
+  check('v3: desplazamiento virtual (fila 300)', has('#sensor-table', 'Sensor 300'));
 
   // ---- Historial ----
   clickPage('historial');
@@ -211,8 +270,8 @@ function check(name, ok) {
     try { csv = b.text ? await b.text() : ''; } catch (e) { csv = ''; }
   }
   const csvLines = csv.split('\n');
-  check('historial: CSV con cabecera y 5 filas',
-    csvLines.length === 6 && csvLines[0] === 'timestamp,cpu_temp_c,cpu_load_pct,ram_used_mb,gpu_temp_c,bat_pct');
+  check('historial: CSV con cabecera y datos',
+    csvLines.length >= 6 && csvLines[0] === 'timestamp,cpu_temp_c,cpu_load_pct,ram_used_mb,gpu_temp_c,bat_pct');
   check('historial: CSV deja vacíos los nulos', csv.includes(',,'));
 
   // ---- Ayuda ----
@@ -232,6 +291,18 @@ function check(name, ok) {
   check('config: chips de mini ventana', doc.querySelectorAll('#page-config .chip').length === 5);
   check('config: versión y dependencias', has('#page-config', 'Svelte'));
   check('config: transparencia ajustable', !!doc.getElementById('cfg-alpha'));
+  check('config: integración con Windows', has('#page-config', 'Integración con Windows'));
+  check('config: sistema real', has('#page-config', 'Windows 11 24H2'));
+  check('config: atajo global', !!doc.getElementById('cfg-hotkey'));
+  check('config: distintivo de barra de tareas', !!doc.getElementById('cfg-taskbar-badge'));
+  check('config: rendimiento adaptativo', !!doc.getElementById('cfg-adaptive'));
+  check('config: botones de Windows', !!doc.getElementById('btn-win-colors') && !!doc.getElementById('btn-win-battery'));
+  const hk = doc.getElementById('cfg-hotkey');
+  if (hk) { hk.click(); await flush(60); }
+  check('config: comando de atajo enviado', sent.some((m) => m.cmd === 'setHotkey'));
+  const wc = doc.getElementById('btn-win-colors');
+  if (wc) { wc.click(); await flush(60); }
+  check('config: abrir Colores de Windows', sent.some((m) => m.cmd === 'openWindowsSettings' && m.key === 'colors'));
 
   // ---- Comandos que la app nativa espera recibir ----
   clickPage('cpu');
@@ -242,7 +313,9 @@ function check(name, ok) {
     'setFirstRunDone', 'setRefresh', 'setUnit', 'setCpuSensor', 'setThresholds', 'setMiniOptions',
     'setBatteryAlert', 'testBatteryAlert', 'setStartMinimized', 'setStartWithWindows', 'setAutoUpdates',
     'resetSettings', 'openLogs', 'restartAdmin', 'checkUpdates', 'downloadUpdate', 'retryLaunch',
-    'setHvci', 'rebootNow', 'defenderStatus', 'defenderAdd', 'defenderRemove'];
+    'setHvci', 'rebootNow', 'defenderStatus', 'defenderAdd', 'defenderRemove',
+    // v3.0.0
+    'setHotkey', 'setTaskbarBadge', 'setAdaptivePerf', 'health', 'openWindowsSettings'];
   const missing = CMDS.filter((c) => !js.includes(c));
   check('protocolo completo (' + CMDS.length + ' comandos)', missing.length === 0);
   if (missing.length) console.log('   faltan: ' + missing.join(', '));
@@ -261,6 +334,8 @@ function check(name, ok) {
   send('snapshot', hot);
   await flush(80);
   check('banner crítico a 96 °C', !!doc.getElementById('alert-banner') && doc.getElementById('alert-banner').className.includes('crit'));
+  check('v3: salud crítica enviada a la barra de tareas',
+    sent.some((m) => m.cmd === 'health' && m.cls === 'crit'));
 
   // ---- Pausa: congela historial ----
   clickPage('resumen');

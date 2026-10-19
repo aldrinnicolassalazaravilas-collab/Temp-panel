@@ -42,7 +42,12 @@
   });
 </script>
 
-{#if s && b}
+{#if s && b && !b.present}
+  <Card title="Batería">
+    <div class="muted">Este equipo no expone una batería (sobremesa o sin batería detectada).
+      TempPanel no inventa un nivel: solo representa lo que Windows publica.</div>
+  </Card>
+{:else if s && b}
   <div class="grid cards-4" id="bat-cards">
     <Card title="Carga" cls={b.charging === true ? "charging" : ""}>
       {#if b.charging === true}

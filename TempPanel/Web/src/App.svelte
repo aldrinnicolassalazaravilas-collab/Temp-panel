@@ -1,6 +1,6 @@
 <script>
   import { onMount } from "svelte";
-  import { app, cmd, initBridge, loadUiPrefs, saveUiPrefs, setPage, togglePause, toggleImmersive } from "./lib/state.svelte.js";
+  import { app, cmd, initBridge, loadUiPrefs, saveUiPrefs, setPage, togglePause, toggleImmersive, syncOsTheme } from "./lib/state.svelte.js";
   import TitleBar from "./components/TitleBar.svelte";
   import Sidebar from "./components/Sidebar.svelte";
   import TopBar from "./components/TopBar.svelte";
@@ -48,6 +48,8 @@
     document.body.classList.toggle("no-glass", !glass);
   });
   $effect(() => { document.body.classList.toggle("immersive", !!app.immersive); });
+  // v3.0.0: alto contraste + color de acento que envía Windows.
+  $effect(() => { syncOsTheme(); });
   $effect(() => {
     const st = document.documentElement.style;
     const a = app.uiAlpha;

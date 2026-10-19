@@ -92,7 +92,7 @@
         </div>
       </div>
       <Sparkline values={spBat} color="#34d399" />
-      <div class="muted small">{s.battery.present ? batTrendLabel(s.battery) : txt(s.battery.status)}</div>
+      <div class="muted small">{s.battery.present ? batTrendLabel(s.battery) : "Este equipo no expone batería"}</div>
     </Card>
   </div>
 

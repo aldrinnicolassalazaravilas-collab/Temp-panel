@@ -1,5 +1,5 @@
 <script>
-  import { app, TITLES, cmd, togglePause, toggleImmersive } from "../lib/state.svelte.js";
+  import { app, TITLES, cmd, togglePause, toggleImmersive, PERF_LABELS } from "../lib/state.svelte.js";
 </script>
 
 <header id="topbar">
@@ -8,6 +8,12 @@
     <div id="last-read" class="muted">{app.lastRead}</div>
   </div>
   <div class="top-actions">
+    {#if app.cfg.perf && app.cfg.perf !== "normal"}
+      <span id="perf-chip" class="alert info"
+            title="TempPanel reduce la actividad mientras no lo miras (segundo plano, pantalla completa o ahorro de energía). Se puede desactivar en Configuración → Integración con Windows.">
+        {PERF_LABELS[app.cfg.perf] || app.cfg.perf}
+      </span>
+    {/if}
     <span id="health-dot" class="health {app.health}" title="Estado general"></span>
     {#if app.alertCls}
       <span id="alert-banner" class="alert {app.alertCls}">{app.alertText}</span>

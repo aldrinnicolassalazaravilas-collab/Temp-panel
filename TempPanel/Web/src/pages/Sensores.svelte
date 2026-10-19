@@ -38,6 +38,40 @@
     return out;
   });
 
+  // v3.0.0 — virtualización: con cientos de sensores solo se montan las filas
+  // visibles (menos DOM, menos RAM y desplazamiento fluido). Los huecos de
+  // arriba/abajo conservan la altura real de la lista.
+  const ROW_H = 34;
+  const OVERSCAN = 8;
+  let wrapEl = $state(null);
+  let scrollTop = $state(0);
+  let viewH = $state(560);
+  let total = $derived(rows.length);
+  let start = $derived(total === 0 ? 0
+    : Math.min(total - 1, Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN)));
+  let end = $derived(Math.min(total, start + Math.ceil(viewH / ROW_H) + OVERSCAN * 2));
+  let visible = $derived(rows.slice(start, end));
+  let padTop = $derived(start * ROW_H);
+  let padBottom = $derived(Math.max(0, (total - end) * ROW_H));
+
+  function onScroll(e) { scrollTop = e.currentTarget.scrollTop; }
+
+  $effect(() => {
+    if (!wrapEl) return;
+    viewH = wrapEl.clientHeight || 560;
+    if (typeof ResizeObserver === "undefined") return; // JSDOM no lo implementa
+    const ro = new ResizeObserver(() => { viewH = wrapEl.clientHeight || 560; });
+    ro.observe(wrapEl);
+    return () => ro.disconnect();
+  });
+
+  // Al filtrar u ordenar se vuelve arriba para no quedar fuera de la lista.
+  $effect(() => {
+    app.filter; app.sortKey; app.sortDir;
+    if (wrapEl) { wrapEl.scrollTop = 0; }
+    scrollTop = 0;
+  });
+
   function sortBy(key) {
     if (app.sortKey === key) app.sortDir = -app.sortDir;
     else { app.sortKey = key; app.sortDir = 1; }
@@ -53,7 +87,7 @@
 </Card>
 
 <Card>
-  <div class="table-wrap">
+  <div class="table-wrap" bind:this={wrapEl} onscroll={onScroll}>
     <table id="sensor-table">
       <thead>
         <tr>
@@ -65,8 +99,11 @@
         </tr>
       </thead>
       <tbody>
-        {#each rows as x, i (i)}
-          <tr>
+        {#if padTop > 0}
+          <tr class="spacer" aria-hidden="true"><td colspan="7" style="height:{padTop}px"></td></tr>
+        {/if}
+        {#each visible as x, i (start + i)}
+          <tr class="row">
             <td>{x.hardware}</td>
             <td>{x.hardwareType}</td>
             <td>{x.type}</td>
@@ -76,6 +113,9 @@
             <td>{x.max != null ? x.max : "—"}</td>
           </tr>
         {/each}
+        {#if padBottom > 0}
+          <tr class="spacer" aria-hidden="true"><td colspan="7" style="height:{padBottom}px"></td></tr>
+        {/if}
       </tbody>
     </table>
   </div>

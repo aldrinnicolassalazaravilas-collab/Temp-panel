@@ -2,7 +2,7 @@
 ; Requiere: publish self-contained en ..\publish\win-x64
 
 #define MyAppName "TempPanel"
-#define MyAppVersion "2.5.1"
+#define MyAppVersion "3.0.0"
 #define MyAppPublisher "TempPanel"
 #define MyAppURL "https://github.com/temppanel/temppanel"
 #define MyAppExeName "TempPanel.exe"

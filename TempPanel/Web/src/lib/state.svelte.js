@@ -18,13 +18,21 @@ export const app = $state({
     refreshMs: 2000, cpuWarnTemp: 85, cpuCritTemp: 95, gpuWarnTemp: 80, gpuCritTemp: 90,
     preferredCpuSensor: "auto", unit: "C", startMinimized: false, startWithWindows: false,
     glass: false, batteryEnabled: true, batteryThreshold: 80, batteryRearm: 75, batterySound: true,
-    batteryMode: "popup", batteryFull: true, version: "2.5.1", autoCheckUpdates: false, firstRun: false,
-    miniSeries: "cpu,temp,bat,ram,gpu", miniExpanded: false
+    batteryMode: "popup", batteryFull: true, version: "3.0.0", autoCheckUpdates: false, firstRun: false,
+    miniSeries: "cpu,temp,bat,ram,gpu", miniExpanded: false,
+    // v3.0.0 — integración con Windows y rendimiento adaptativo.
+    adaptivePerf: true, hotkeyEnabled: true, taskbarBadge: true,
+    effectiveMs: 2000, perf: "normal",
+    os: {
+      name: "Windows", build: 0, win11: false, accent: "#4f8cff", theme: "dark",
+      highContrast: false, powerSaver: false, hotkey: false, glass: false
+    }
   },
   snap: null,
   page: "resumen",
   paused: false,
   immersive: false,
+  osHover: "",
   conn: { cls: "waiting", text: "Conectando…" },
   lastRead: "Última lectura: —",
   alertCls: "", alertText: "", health: "ok", warns: [],
@@ -59,6 +67,12 @@ export const cmd = {
   setStartMinimized: (value) => post({ cmd: "setStartMinimized", value }),
   setStartWithWindows: (value) => post({ cmd: "setStartWithWindows", value }),
   setAutoUpdates: (value) => post({ cmd: "setAutoUpdates", value }),
+  // v3.0.0 — integración con Windows
+  setHotkey: (value) => post({ cmd: "setHotkey", value }),
+  setTaskbarBadge: (value) => post({ cmd: "setTaskbarBadge", value }),
+  setAdaptivePerf: (value) => post({ cmd: "setAdaptivePerf", value }),
+  health: (cls) => post({ cmd: "health", cls }),
+  openWindowsSettings: (key) => post({ cmd: "openWindowsSettings", key }),
   resetSettings: () => post({ cmd: "resetSettings" }),
   openLogs: () => post({ cmd: "openLogs" }),
   restartAdmin: () => post({ cmd: "restartAdmin" }),
@@ -140,6 +154,8 @@ export function slopePerMin(key, rangeS, convert) {
 // ---------- Alertas térmicas (informativas, con histéresis y enfriamiento) ----------
 let tempAlertState = { cpuWarn: false, cpuCrit: false, gpuWarn: false, gpuCrit: false };
 let lastTempAlertAt = 0;
+// Se avisa al nativo solo cuando cambia (distintivo de la barra de tareas).
+let lastHealthSent = "ok";
 
 function updateAlerts(s) {
   const nowMs = Date.now();
@@ -168,6 +184,7 @@ function updateAlerts(s) {
   else if (gw) { text = `⚠ GPU a ${d(gpuT)} (aviso ${d(app.cfg.gpuWarnTemp)})`; cls = "warn"; }
   app.alertCls = cls; app.alertText = text;
   app.health = cls === "crit" ? "crit" : cls === "warn" ? "warn" : "ok";
+  if (app.health !== lastHealthSent) { lastHealthSent = app.health; cmd.health(app.health); }
 
   const warns = (s.warnings || []).filter(Boolean);
   if (s.meta && !s.meta.isAdmin) warns.unshift("La app no se ejecuta como administrador: algunos sensores pueden no estar disponibles.");
@@ -192,7 +209,9 @@ let msgTimer = null;
 export function onSnapshot(s) {
   clearTimeout(msgTimer);
   app.snap = s;
-  const secs = (s.meta?.refreshMs ?? app.cfg.refreshMs) / 1000;
+  // Intervalo REAL (el gobernador puede ampliarlo en segundo plano/ahorro).
+  const millis = app.cfg.effectiveMs || s.meta?.refreshMs || app.cfg.refreshMs;
+  const secs = millis / 1000;
   app.conn = { cls: "ok", text: `Conectado · cada ${secs} s` };
   app.lastRead = "Última lectura: " + (s.meta?.lastReadLocal || s.timestampLocal || "—");
   if (app.paused) return; // pausa: congela gráficas e historial, la lectura sigue
@@ -223,6 +242,8 @@ export function onMessageDispatch(m) {
   if (!m || !m.type) return;
   if (m.type === "config") Object.assign(app.cfg, m.data || {});
   else if (m.type === "snapshot") onSnapshot(m.data);
+  else if (m.type === "hover") app.osHover = m.data?.id || "";
+  else if (m.type === "navigate" && m.data?.page) setPage(m.data.page);
   else if (m.type === "updateStatus") onUpdate(m.data);
   else if (m.type === "defenderStatus") app.defender = m.data || { ok: false, excluded: false, message: "" };
   else if (m.type === "hvciStatus") {
@@ -244,6 +265,29 @@ export function initBridge() {
     }, 8000);
   }
   return ok;
+}
+
+// ---------- Preferencias solo de la interfaz (no tocan config.json) ----------
+export const PERF_LABELS = {
+  normal: "",
+  background: "Segundo plano",
+  saver: "Ahorro de energía",
+  fullscreen: "Pantalla completa",
+  hidden: "Oculto"
+};
+
+/**
+ * v3.0.0 — Aplica a la página el alto contraste y el color de acento de
+ * Windows. El diseño sigue siendo el mismo; solo cambian los acentos y los
+ * bordes cuando el sistema lo pide (accesibilidad).
+ */
+export function syncOsTheme() {
+  const os = app.cfg.os || {};
+  const hc = !!os.highContrast;
+  document.body.classList.toggle("hc", hc);
+  const accent = /^#[0-9a-f]{6}$/i.test(os.accent || "") ? os.accent : "#4f8cff";
+  document.documentElement.style.setProperty("--os-accent", accent);
+  document.body.dataset.perf = os.perf || app.cfg.perf || "normal";
 }
 
 // ---------- Preferencias solo de la interfaz (no tocan config.json) ----------

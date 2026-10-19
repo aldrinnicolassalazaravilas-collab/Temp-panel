@@ -51,8 +51,36 @@ Si falta WebView2, el instalador te muestra el enlace oficial de Microsoft.
 > «No disponible» significa que tu hardware no publica ese sensor. Nunca se
 > muestran cifras inventadas.
 
-## Interfaz translúcida y consumo (novedad v2.5.0; v2.5.1 corrige la ventana en negro)
+## Novedades v3.0.0 — más integración con Windows, menos consumo
 
+- **Atajo global Ctrl+Alt+T**: muestra u oculta TempPanel desde cualquier
+  aplicación (se puede desactivar en Configuración → Integración con Windows).
+- **Snap Layouts de Windows 11**: al pasar el ratón por el botón maximizar
+  aparece el menú de distribuciones de ventanas, como en cualquier app nativa.
+- **Barra de tareas**: distintivo de alerta (amarillo/rojo) cuando una
+  temperatura supera tu umbral y progreso de carga mientras la batería carga.
+- **Bandeja más útil**: doble clic para abrir, accesos directos a «Sensores» y
+  «Configuración» y resumen vivo (CPU, carga y batería) en el tooltip.
+- **Eventos del sistema**: al bloquear la sesión o suspender el equipo se reduce
+  la actividad y se refresca al volver; los cambios de tema, color de acento y
+  alto contraste se aplican a la interfaz sin reiniciar.
+- **Accesos a Windows**: botones para abrir «Colores» y «Ahorro de energía» de
+  Configuración de Windows desde la propia app.
+- **Rendimiento adaptativo**: en primer plano se usa tu intervalo; sin foco,
+  mínimo 3 s; oculto/minimizado, bloqueado o con un juego a pantalla completa,
+  5 s y el motor de interfaz se suspende. Todo se puede desactivar.
+- **Arranque más rápido y menos RAM**: el lector de sensores ya no bloquea el
+  primer pintado (pantalla de carga nativa) y la tabla de sensores solo monta
+  las filas visibles (virtualización), incluso con cientos de sensores.
+- **Más compatible**: ventana mínima de 820×560 con barra lateral de iconos en
+  pantallas estrechas, equipos de sobremesa sin batería (se explica, no se
+  inventa un nivel), alto contraste de Windows y Windows 10 con tema sólido.
+  La build x64 también funciona en Windows 11 ARM por emulación.
+
+## Interfaz translúcida y consumo (v2.5.0; ventana en negro corregida en v2.5.1)
+
+- **v3.0.0 — integración y rendimiento**: atajo global, Snap Layouts, barra de
+  tareas, eventos de energía y reducción adaptativa de actividad (ver arriba).
 - **v2.5.1 — ventana en negro corregida**: la 2.5.0 podía abrirse sin interfaz
   (faltaba un ensamblado del SDK de Windows que necesita el cristal). La 2.5.1 lo
   incluye y, si el cristal no está disponible, la app pasa sola al tema oscuro
@@ -94,7 +122,8 @@ Si falta WebView2, el instalador te muestra el enlace oficial de Microsoft.
   valor intermedio inventado).
 - **Atajos de teclado**: **1-9** y **0** cambian de página, **F** inmersivo,
   **P** pausa (congela gráficas e historial; los sensores siguen midiendo),
-  **R** pide una lectura ahora y **M** abre la mini ventana.
+  **R** pide una lectura ahora y **M** abre la mini ventana. **Ctrl+Alt+T**
+  (global, funciona con la app en segundo plano) muestra u oculta la ventana.
 - **Avisos flotantes** para acciones (copiar resumen, guardar, exportar) en
   lugar de ventanas de diálogo, y pestañas que se deslizan con transición.
 
@@ -109,9 +138,11 @@ carga física: ningún método seguro existe para este modelo, así que solo avi
 ## Bandeja del sistema
 
 Cerrar la ventana minimiza a la bandeja (sigue monitorizando). Doble clic o
-«Abrir» restaura; «Salir» cierra del todo. Solo puede haber una instancia:
-abrir de nuevo restaura la existente. El icono muestra el resumen vivo
-(CPU, carga y batería). En Ajustes hay botón para abrir la carpeta de registros.
+«Abrir» restaura; el menú incluye «Mini ventana», «Sensores» y «Configuración»
+para saltar directamente, y «Salir» cierra del todo. Solo puede haber una
+instancia: abrir de nuevo restaura la existente. El icono muestra el resumen vivo
+(CPU, carga y batería) y la barra de tareas puede mostrar un distintivo de alerta
+y el progreso de carga. En Ajustes hay botón para abrir la carpeta de registros.
 
 ## Mini ventana
 
@@ -155,12 +186,13 @@ Panel de control → Programas → TempPanel → Desinstalar. Solo borra lo suyo
 - Interfaz: `cd TempPanel\Web` → `npm install` (solo la primera vez) →
   `npm run build`. El resultado se commitea en `TempPanel/Frontend/`, así que
   **publicar la app no necesita Node**.
-- Comprobaciones: `node uitest\run.js` (52 pruebas DOM reales sobre el bundle,
+- Comprobaciones: `node uitest\run.js` (71 pruebas DOM reales sobre el bundle,
   con JSDOM), `node uitest\preview.js` (genera `Frontend/_preview.html` con el
   puente emulado y datos reales del `--selftest`), `node uitest\csslint.js`
   (paréntesis desbalanceados en CSS, error silencioso clásico).
-- `dotnet test TempPanel.sln -c Release` (70 pruebas) · publish autocontenido
-  win-x64 · `--selftest` escribe `%TEMP%\temppanel-selftest.json` sin GUI.
+- `dotnet test TempPanel.sln -c Release` (86 pruebas) · publish autocontenido
+  win-x64 · `--selftest` escribe `%TEMP%\temppanel-selftest.json` sin GUI ·
+  `--uicheck` abre la ventana real y verifica interfaz + cristal + sensores.
 - Instalador: `TempPanel/InnoSetup/setup.iss` (Inno Setup 6).
 - Actualizador: `Services/UpdateService.cs` lee `releases/latest` de
   `aldrinnicolassalazaravilas-collab/Temp-panel` y descarga el asset

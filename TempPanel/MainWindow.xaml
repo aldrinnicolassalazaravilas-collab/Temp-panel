@@ -4,12 +4,16 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         Title="TempPanel — Monitor de hardware en tiempo real"
-        Width="1180" Height="760" MinWidth="900" MinHeight="600"
+        Width="1180" Height="760" MinWidth="820" MinHeight="560"
         WindowStartupLocation="CenterScreen"
         WindowStyle="None" ResizeMode="CanResize"
         AllowsTransparency="False"
         Background="Transparent"
         UseLayoutRounding="True" SnapsToDevicePixels="True">
+    <!-- v3.0.0: barra de tareas — distintivo de alerta y progreso de carga. -->
+    <Window.TaskbarItemInfo>
+        <shell:TaskbarItemInfo x:Name="TaskInfo"/>
+    </Window.TaskbarItemInfo>
     <!-- Ventana sin marco: esquinas redondeadas y acrílico (Windows 11) aplicados
          por DWM desde el código (WindowFx). Borde redimensionable de 7 px. -->
     <shell:WindowChrome.WindowChrome>
@@ -24,5 +28,29 @@
         <wv2:WebView2CompositionControl x:Name="WebGlass" Visibility="Collapsed"/>
         <!-- Control clásico (respaldo opaco si el cristal no está disponible) -->
         <wv2:WebView2 x:Name="Web" Visibility="Collapsed"/>
+        <!-- v3.0.0: pantalla de carga nativa. Se pinta al instante (antes de que
+             WebView2 cree su proceso) y se retira en cuanto la interfaz está
+             lista: la app se siente inmediata aunque el motor tarde 1-2 s. -->
+        <Border x:Name="LoadingLayer" Background="#070b16">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Border Width="72" Height="72" CornerRadius="20" HorizontalAlignment="Center"
+                        BorderThickness="1" BorderBrush="#2a4a7a">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#12233f" Offset="0"/>
+                            <GradientStop Color="#0a1220" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <TextBlock Text="TP" FontSize="26" FontWeight="SemiBold"
+                               Foreground="#8fc2ff" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <TextBlock Text="TempPanel" FontSize="24" FontWeight="SemiBold"
+                           Foreground="#eef4ff" Margin="0,18,0,4" HorizontalAlignment="Center"/>
+                <TextBlock Text="Preparando la interfaz…" FontSize="13"
+                           Foreground="#93a5c4" HorizontalAlignment="Center"/>
+                <ProgressBar IsIndeterminate="True" Width="190" Height="3" Margin="0,20,0,0"
+                             Foreground="#4f8cff" Background="#16233a" BorderThickness="0"/>
+            </StackPanel>
+        </Border>
     </Grid>
 </Window>

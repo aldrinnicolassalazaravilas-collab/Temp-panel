@@ -103,11 +103,14 @@ const runtime = `<script>
     "linear-gradient(135deg, #101828 0%, #1b2437 40%, #0b1220 100%) fixed}";
   document.head.appendChild(wall);
 
-  var cfg = { refreshMs: 1000, glass: true, version: "2.5.0", firstRun: false, unit: "C",
+  var cfg = { refreshMs: 1000, glass: true, version: "3.0.0", firstRun: false, unit: "C",
     cpuWarnTemp: 85, cpuCritTemp: 95, gpuWarnTemp: 80, gpuCritTemp: 90,
     miniSeries: "cpu,temp,bat,ram,gpu", miniExpanded: true, preferredCpuSensor: "auto",
     batteryEnabled: true, batteryThreshold: 80, batteryRearm: 75, batterySound: true,
-    batteryMode: "popup", batteryFull: true, startMinimized: false, startWithWindows: false };
+    batteryMode: "popup", batteryFull: true, startMinimized: false, startWithWindows: false,
+    adaptivePerf: true, hotkeyEnabled: true, taskbarBadge: true, effectiveMs: 1000, perf: "normal",
+    os: { name: "Windows 11 25H2", build: 26200, win11: true, accent: "#4f8cff", theme: "dark",
+          highContrast: false, powerSaver: false, hotkey: true, glass: true } };
   var samples = ${JSON.stringify(samples)};
   var i = 0;
   function tick() {

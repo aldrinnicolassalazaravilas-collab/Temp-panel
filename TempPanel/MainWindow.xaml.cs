@@ -15,7 +15,9 @@ namespace TempPanel;
 /// </summary>
 public partial class MainWindow : Window
 {
-    private HardwareMonitor _monitor;
+    // v3.0.0 — arranque rápido: el lector LHM se crea en segundo plano DESPUÉS
+    // de mostrar la ventana (su apertura tarda ~1 s y bloqueaba el primer pintado).
+    private HardwareMonitor? _monitor;
     private readonly object _monLock = new();
     private readonly AppConfig _config;
     private readonly System.Threading.Timer _sensorTimer;
@@ -53,6 +55,8 @@ public partial class MainWindow : Window
     private readonly bool _uiCheck;
     /// <summary>--uicheck: la interfaz ya cargó (lo consulta el modo de prueba).</summary>
     public bool UiReady { get; private set; }
+    /// <summary>--uicheck: el lector de sensores terminó de abrirse.</summary>
+    public bool SensorsReady { get; private set; }
     /// <summary>--uicheck: se está usando el control con transparencia.</summary>
     public bool GlassActive => _glassMode;
     private bool _webSuspended;
@@ -61,6 +65,35 @@ public partial class MainWindow : Window
     // Franja superior arrastrable (barra de la interfaz) y zona de botones.
     private const double CaptionHeight = 44;
     private const double CaptionButtonsWidth = 150;
+    // Contrato con la interfaz (app.css): botones de 38x30, separación 4 px y
+    // margen derecho 8 px. Sirven para devolver HTMAXBUTTON (Snap Layouts Win11).
+    private const double CaptionButtonW = 38;
+    private const double CaptionButtonH = 30;
+    private const double CaptionButtonGap = 4;
+    private const double CaptionRightPad = 8;
+
+    // --- v3.0.0: integración con Windows y rendimiento adaptativo ---
+    private readonly System.Windows.Threading.DispatcherTimer _perfTimer;
+    private IntPtr _hwnd;
+    private string _osName = "Windows";
+    private int _osBuild;
+    private bool _osWin11;
+    private string _osAccent = "#4f8cff";
+    private bool _hotkeyRegistered;
+    private string _perfMode = PerformanceGovernor.Mode.Normal;
+    private int _effectiveMs = 2000;
+    private bool _webSuspendedByPerf;
+    private bool _sessionLocked;
+    private string _health = "ok";
+    private bool _hoverMax;
+    private Sensors.Snapshot? _lastSnap;
+    private readonly DateTime _startedAt = DateTime.UtcNow;
+    private const int HotkeyId = 0xB10;
+    private const int WM_HOTKEY = 0x0312;
+    private const int WM_NCMOUSEMOVE = 0x00A0;
+    private const int WM_NCMOUSELEAVE = 0x02A3;
+    private const int WM_NCLBUTTONDOWN = 0x00A1;
+    private const int HTMAXBUTTON = 9;
 
     public MainWindow() : this(false) { }
 
@@ -84,11 +117,12 @@ public partial class MainWindow : Window
         }
 
         _config = AppConfig.Load();
-        _monitor = new HardwareMonitor
-        {
-            RefreshMs = _config.RefreshMs,
-            PreferredCpuSensor = _config.PreferredCpuSensor
-        };
+        var os = SystemInfo.WindowsVersion();
+        _osName = os.Name;
+        _osBuild = os.Build;
+        _osWin11 = os.Win11;
+        try { _osAccent = SystemInfo.AccentHex(); } catch { }
+        _effectiveMs = _config.RefreshMs;
         _batteryService = BatteryAlertService.FromConfig(_config);
         _batteryService.AlertTriggered += OnBatteryAlert;
         _fullService = new BatteryAlertService();
@@ -112,6 +146,9 @@ public partial class MainWindow : Window
         var menu = new System.Windows.Forms.ContextMenuStrip();
         menu.Items.Add("Abrir TempPanel", null, (_, __) => RestoreWindow());
         menu.Items.Add("Mini ventana", null, (_, __) => OpenMini());
+        menu.Items.Add("Sensores", null, (_, __) => NavigateTo("sensores"));
+        menu.Items.Add("Configuración", null, (_, __) => NavigateTo("config"));
+        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
         menu.Items.Add("Salir", null, (_, __) => ExitApp());
         _tray.ContextMenuStrip = menu;
 
@@ -122,12 +159,16 @@ public partial class MainWindow : Window
         // cada 10 minutos recreando el lector. Barato y honesto.
         _recycleTimer = new System.Threading.Timer(_ => MaybeRecycleMonitor(), null, Timeout.Infinite, Timeout.Infinite);
 
+        // v3.0.0 — gobernador de rendimiento: cada 3 s revisa si hay una app a
+        // pantalla completa, ahorro de energía o cambios de foco. Barato y sin
+        // tocar hardware.
+        _perfTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        _perfTimer.Tick += (_, __) => ApplyPerformance();
+
         Loaded += OnLoadedWindow;
-        StateChanged += (_, __) =>
-        {
-            // Minimizada = fuera de vista: se suspende el motor WebView2 (ahorro de RAM).
-            _ = SetWebVisibleAsync(WindowState != WindowState.Minimized && IsVisible);
-        };
+        StateChanged += (_, __) => ApplyPerformance();
+        Activated += (_, __) => Dispatcher.BeginInvoke(() => ApplyPerformance());
+        Deactivated += (_, __) => Dispatcher.BeginInvoke(() => ApplyPerformance());
         Closing += OnClosingWindow;
         Closed += (_, __) => Cleanup();
 
@@ -144,16 +185,27 @@ public partial class MainWindow : Window
     {
         try
         {
+            _hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+
             // Cristal acrílico de Windows 11 + esquinas redondeadas (si el
             // sistema lo soporta). Si no, la ventana queda oscura y opaca.
             bool acrylic = WindowFx.SupportsGlass() && WindowFx.ApplyAcrylic(this);
             AppLogger.Info("Cristal: " + (acrylic ? "acrílico aplicado" : "no disponible (tema oscuro sólido)"));
-            if (acrylic)
-            {
-                var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-                if (hwnd != IntPtr.Zero)
-                    System.Windows.Interop.HwndSource.FromHwnd(hwnd)?.AddHook(WndProcHook);
-            }
+
+            // El hook se instala SIEMPRE (v3.0.0): además del arrastre nativo,
+            // gestiona el atajo global, Snap Layouts y el hover del maximizar.
+            if (_hwnd != IntPtr.Zero)
+                System.Windows.Interop.HwndSource.FromHwnd(_hwnd)?.AddHook(WndProcHook);
+
+            AppLogger.Info($"Ventana mostrada en {(DateTime.UtcNow - _startedAt).TotalMilliseconds:0} ms · {_osName} (build {_osBuild}).");
+
+            // Arranque rápido: el lector de sensores se abre DESPUÉS de que la
+            // interfaz esté lista (ver NavigationCompleted), para no competir
+            // con el arranque de WebView2.
+            RegisterHotkey();
+            SubscribeSystemEvents();
+            _perfTimer.Start();
+            ApplyPerformance(force: true);
         }
         catch (Exception ex) { AppLogger.Error("WindowFx: " + ex.Message); }
         await InitWebAsync();
@@ -248,6 +300,7 @@ public partial class MainWindow : Window
                 if (!nav.IsSuccess)
                 {
                     AppLogger.Error($"Navegación fallida: {nav.HttpStatusCode} ({nav.WebErrorStatus})");
+                    try { LoadingLayer.Visibility = Visibility.Collapsed; } catch { }
                     if (!_uiCheck)
                         System.Windows.MessageBox.Show(
                             "No se pudo cargar la interfaz.\n\n" +
@@ -258,18 +311,36 @@ public partial class MainWindow : Window
                 }
                 _webReady = true;
                 UiReady = true;
-                _monitor.IncludeAllSensors = _page == "sensores";
+                try { LoadingLayer.Visibility = Visibility.Collapsed; } catch { }
+                lock (_monLock) { if (_monitor != null) _monitor.IncludeAllSensors = _page == "sensores"; }
                 SendConfig();
-                _sensorTimer.Change(0, _config.RefreshMs);
+                // v3.0.0: el intervalo real lo decide el gobernador (foco,
+                // pantalla completa, ahorro de energía). Forzar deja el motor
+                // reanudado y el temporizador con el intervalo efectivo.
+                ApplyPerformance(force: true);
+                // Con la interfaz ya en pantalla, se abre el lector de sensores
+                // en segundo plano (driver + enumeración de hardware ~1 s).
+                _ = InitMonitorAsync();
                 _batteryTimer.Change(TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
                 _recycleTimer.Change(TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(10));
                 if (_config.AutoCheckUpdates) _ = CheckUpdatesAsync(manual: false);
+                AppLogger.Info($"Interfaz lista en {(DateTime.UtcNow - _startedAt).TotalMilliseconds:0} ms.");
             };
             _web.Source = new Uri("https://temppanel.local/index.html");
         }
         catch (Exception ex)
         {
             AppLogger.Error("InitWebView2: " + ex);
+            try
+            {
+                // Sin interfaz: se retira la pantalla de carga y se deja un
+                // fondo sólido legible (nunca una ventana vacía o negra).
+                LoadingLayer.Visibility = Visibility.Collapsed;
+                if (Root.Background == null)
+                    Root.Background = new System.Windows.Media.SolidColorBrush(
+                        System.Windows.Media.Color.FromRgb(0x0B, 0x12, 0x20));
+            }
+            catch { }
             if (!_uiCheck)
                 System.Windows.MessageBox.Show("No se pudo iniciar WebView2.\n\n" + ex.Message +
                     "\n\nInstala el runtime WebView2 desde:\nhttps://go.microsoft.com/fwlink/p/?LinkId=2124703",
@@ -277,16 +348,42 @@ public partial class MainWindow : Window
         }
     }
 
-    // ---------------- Cristal + ahorro de RAM (v2.5.0) ----------------
+    // ---------------- Cristal + integración con Windows (v3.0.0) ----------------
 
-    /// <summary>Arrastre nativo de la franja superior (modo sin marco + cristal).</summary>
+    /// <summary>
+    /// Arrastre nativo de la franja superior, Snap Layouts de Windows 11
+    /// (HTMAXBUTTON sobre el botón maximizar), hover del botón y atajo global.
+    /// </summary>
     private IntPtr WndProcHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         const int WM_NCHITTEST = 0x0084;
         const int HTCAPTION = 2;
-        if (msg == WM_NCHITTEST && _glassMode)
+        try
         {
-            try
+            if (msg == WM_HOTKEY && wParam.ToInt32() == HotkeyId)
+            {
+                handled = true;
+                ToggleFromHotkey();
+                return IntPtr.Zero;
+            }
+            if (msg == WM_NCLBUTTONDOWN && _glassMode && wParam.ToInt32() == HTMAXBUTTON)
+            {
+                // El clic lo gestiona la app (el sistema lo reserva para Snap
+                // Layouts y no llega al HTML): alterna maximizar/restaurar.
+                handled = true;
+                ToggleMaximize();
+                return IntPtr.Zero;
+            }
+            if (msg == WM_NCMOUSEMOVE)
+            {
+                SetMaxHover(_glassMode && wParam.ToInt32() == HTMAXBUTTON);
+            }
+            else if (msg == WM_NCMOUSELEAVE)
+            {
+                SetMaxHover(false);
+            }
+
+            if (msg == WM_NCHITTEST && _glassMode)
             {
                 long lp = lParam.ToInt64();
                 double sx = (short)(lp & 0xFFFF);
@@ -295,15 +392,303 @@ public partial class MainWindow : Window
                 const double border = 8; // deja el borde para redimensionar (WindowChrome)
                 bool inside = p.X > border && p.Y > border &&
                               p.X < ActualWidth - border && p.Y < ActualHeight - border;
+                if (inside && IsMaxButton(p))
+                {
+                    handled = true;
+                    return (IntPtr)HTMAXBUTTON;
+                }
                 if (inside && p.Y < CaptionHeight && p.X < ActualWidth - CaptionButtonsWidth)
                 {
                     handled = true;
                     return (IntPtr)HTCAPTION;
                 }
             }
-            catch { }
         }
+        catch { }
         return IntPtr.Zero;
+    }
+
+    /// <summary>Zona del botón maximizar (mismo contrato que app.css).</summary>
+    private bool IsMaxButton(System.Windows.Point p)
+    {
+        double top = (CaptionHeight - CaptionButtonH) / 2;
+        if (p.Y < top || p.Y >= top + CaptionButtonH) return false;
+        double closeLeft = ActualWidth - CaptionRightPad - CaptionButtonW;
+        double maxLeft = closeLeft - CaptionButtonGap - CaptionButtonW;
+        return p.X >= maxLeft && p.X < closeLeft - CaptionButtonGap;
+    }
+
+    private void SetMaxHover(bool on)
+    {
+        if (on == _hoverMax) return;
+        _hoverMax = on;
+        PostUi(new { type = "hover", data = new { id = on ? "win-max" : null } });
+    }
+
+    private void ToggleMaximize()
+    {
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+        ApplyPerformance();
+    }
+
+    private void PostUi(object payload)
+    {
+        try
+        {
+            string json = JsonSerializer.Serialize(payload, _jsonOpts);
+            Dispatcher.BeginInvoke(() =>
+            {
+                try { _core?.PostWebMessageAsJson(json); } catch { }
+            });
+        }
+        catch { }
+    }
+
+    // ---------------- Arranque rápido: lector en segundo plano ----------------
+
+    private async Task InitMonitorAsync()
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var mon = await Task.Run(() => new HardwareMonitor
+            {
+                RefreshMs = _config.RefreshMs,
+                PreferredCpuSensor = _config.PreferredCpuSensor
+            });
+            lock (_monLock) { _monitor = mon; }
+            SensorsReady = true;
+            AppLogger.Info($"Sensores listos en {sw.ElapsedMilliseconds} ms.");
+            if (_webReady) PushSnapshot();
+        }
+        catch (Exception ex) { AppLogger.Error("InitMonitor: " + ex.Message); }
+    }
+
+    // ---------------- Rendimiento adaptativo ----------------
+
+    /// <summary>
+    /// Ajusta el intervalo de los sensores y suspende/reanuda WebView2 según
+    /// visibilidad, foco, pantalla completa y ahorro de energía. Se llama por
+    /// eventos (foco, minimizar, bandeja, mini) y cada 3 s por si cambia el
+    /// primer plano. La lógica pura vive en <see cref="PerformanceGovernor"/>.
+    /// </summary>
+    private void ApplyPerformance(bool force = false)
+    {
+        if (_allowClose) return;
+        try
+        {
+            bool mainVisible = IsVisible && WindowState != WindowState.Minimized && !_sessionLocked;
+            bool miniActive = _mini != null && !_sessionLocked;
+            bool gameFullscreen = mainVisible && _hwnd != IntPtr.Zero && SystemInfo.ForegroundIsFullscreen(_hwnd);
+            bool saver = SystemInfo.PowerSaverActive();
+
+            PerformanceGovernor.Decision d;
+            if (miniActive)
+            {
+                // La mini ventana es nativa y ligera: mantiene el ritmo elegido
+                // aunque la ventana principal esté oculta, porque es lo que el
+                // usuario está mirando. El motor WebView2 sí sigue suspendido.
+                d = new PerformanceGovernor.Decision(
+                    Math.Clamp(_config.RefreshMs, PerformanceGovernor.MinMs, 10000),
+                    PerformanceGovernor.Mode.Normal, false);
+            }
+            else
+            {
+                d = PerformanceGovernor.Evaluate(
+                    _config.RefreshMs, mainVisible, IsActive, gameFullscreen, saver, _config.AdaptivePerf);
+            }
+
+            // El motor de interfaz solo se necesita si la ventana principal se ve.
+            bool suspendWeb = d.SuspendWeb || !mainVisible;
+
+            bool modeChanged = d.ModeName != _perfMode;
+            bool intervalChanged = d.EffectiveMs != _effectiveMs;
+            bool suspendChanged = suspendWeb != _webSuspendedByPerf;
+
+            _perfMode = d.ModeName;
+            if (intervalChanged || force)
+            {
+                _effectiveMs = d.EffectiveMs;
+                try { _sensorTimer.Change(0, _effectiveMs); } catch { }
+            }
+            if (suspendChanged || force)
+            {
+                _webSuspendedByPerf = suspendWeb;
+                // Nunca suspender durante la inicialización de WebView2: el
+                // control necesita estar visible para crear su superficie. Al
+                // terminar la navegación se aplica el estado decidido.
+                if (_webReady) _ = SetWebVisibleAsync(!suspendWeb);
+            }
+            if (modeChanged || intervalChanged || suspendChanged)
+            {
+                AppLogger.Info($"Rendimiento: {_perfMode} · cada {_effectiveMs} ms · WebView2 {(_webSuspendedByPerf ? "suspendida" : "activa")}");
+            }
+            if (modeChanged || force) SendConfig();
+        }
+        catch (Exception ex) { AppLogger.Error("ApplyPerformance: " + ex.Message); }
+    }
+
+    // ---------------- Atajo global Ctrl+Alt+T ----------------
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+    private void RegisterHotkey()
+    {
+        if (_uiCheck || _hwnd == IntPtr.Zero || _hotkeyRegistered) return;
+        if (!_config.HotkeyEnabled) return;
+        try
+        {
+            const uint MOD_ALT = 0x1, MOD_CONTROL = 0x2, MOD_NOREPEAT = 0x4000, VK_T = 0x54;
+            _hotkeyRegistered = RegisterHotKey(_hwnd, HotkeyId, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_T);
+            AppLogger.Info(_hotkeyRegistered
+                ? "Atajo global Ctrl+Alt+T registrado."
+                : "Atajo global Ctrl+Alt+T no disponible (lo usa otra app).");
+        }
+        catch (Exception ex) { AppLogger.Error("RegisterHotKey: " + ex.Message); }
+    }
+
+    private void UnregisterHotkey()
+    {
+        if (!_hotkeyRegistered || _hwnd == IntPtr.Zero) return;
+        try { UnregisterHotKey(_hwnd, HotkeyId); } catch { }
+        _hotkeyRegistered = false;
+    }
+
+    private void ToggleFromHotkey()
+    {
+        if (IsVisible && WindowState != WindowState.Minimized && IsActive)
+        {
+            Hide();
+        }
+        else
+        {
+            RestoreWindow();
+        }
+        ApplyPerformance();
+    }
+
+    // ---------------- Eventos del sistema ----------------
+
+    private void SubscribeSystemEvents()
+    {
+        try
+        {
+            Microsoft.Win32.SystemEvents.PowerModeChanged += OnPowerModeChanged;
+            Microsoft.Win32.SystemEvents.SessionSwitch += OnSessionSwitch;
+            Microsoft.Win32.SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+        }
+        catch (Exception ex) { AppLogger.Error("SystemEvents: " + ex.Message); }
+    }
+
+    private void UnsubscribeSystemEvents()
+    {
+        try
+        {
+            Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+            Microsoft.Win32.SystemEvents.SessionSwitch -= OnSessionSwitch;
+            Microsoft.Win32.SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+        }
+        catch { }
+    }
+
+    private void OnPowerModeChanged(object sender, Microsoft.Win32.PowerModeChangedEventArgs e)
+    {
+        if (e.Mode != Microsoft.Win32.PowerModes.Resume) return;
+        AppLogger.Info("Sistema reanudado: refrescando sensores.");
+        Dispatcher.BeginInvoke(() =>
+        {
+            ApplyPerformance(force: true);
+            PushSnapshot();
+        });
+    }
+
+    private void OnSessionSwitch(object sender, Microsoft.Win32.SessionSwitchEventArgs e)
+    {
+        bool locked = e.Reason == Microsoft.Win32.SessionSwitchReason.SessionLock;
+        if (locked == _sessionLocked) return;
+        _sessionLocked = locked;
+        AppLogger.Info(locked ? "Sesión bloqueada: actividad reducida." : "Sesión desbloqueada: actividad normal.");
+        Dispatcher.BeginInvoke(() => ApplyPerformance());
+    }
+
+    private void OnUserPreferenceChanged(object sender, Microsoft.Win32.UserPreferenceChangedEventArgs e)
+    {
+        // Tema, color de acento y alto contraste: se reenvían a la interfaz.
+        Dispatcher.BeginInvoke(() =>
+        {
+            try { _osAccent = SystemInfo.AccentHex(); } catch { }
+            SendConfig();
+            UpdateTaskbar();
+        });
+    }
+
+    // ---------------- Barra de tareas ----------------
+
+    private static System.Windows.Media.ImageSource MakeBadge(System.Windows.Media.Color color)
+    {
+        var g = new System.Windows.Media.DrawingGroup();
+        var fill = new System.Windows.Media.SolidColorBrush(color);
+        fill.Freeze();
+        g.Children.Add(new System.Windows.Media.GeometryDrawing(fill, null,
+            new System.Windows.Media.EllipseGeometry(new System.Windows.Point(8, 8), 8, 8)));
+        var white = System.Windows.Media.Brushes.White;
+        g.Children.Add(new System.Windows.Media.GeometryDrawing(white, null,
+            new System.Windows.Media.RectangleGeometry(new Rect(7, 3.4, 2, 6.2))));
+        g.Children.Add(new System.Windows.Media.GeometryDrawing(white, null,
+            new System.Windows.Media.EllipseGeometry(new System.Windows.Point(8, 12.6), 1.15, 1.15)));
+        var img = new System.Windows.Media.DrawingImage(g);
+        img.Freeze();
+        return img;
+    }
+
+    private readonly System.Windows.Media.ImageSource _badgeWarn =
+        MakeBadge(System.Windows.Media.Color.FromRgb(0xfb, 0xbf, 0x24));
+    private readonly System.Windows.Media.ImageSource _badgeCrit =
+        MakeBadge(System.Windows.Media.Color.FromRgb(0xf8, 0x71, 0x71));
+
+    /// <summary>
+    /// Distintivo de alerta + progreso de carga en el icono de la barra de
+    /// tareas. La salud la calcula la interfaz con histéresis y se recibe por
+    /// mensaje ("health"): el nativo no duplica esa lógica.
+    /// </summary>
+    private void UpdateTaskbar()
+    {
+        try
+        {
+            if (_uiCheck) return;
+            TaskInfo.Overlay = _config.TaskbarBadge && _health != "ok"
+                ? (_health == "crit" ? _badgeCrit : _badgeWarn)
+                : null;
+            var bat = _lastSnap?.Battery;
+            if (bat is { Present: true, Charging: true, Percent: double pct })
+            {
+                TaskInfo.ProgressState = System.Windows.Shell.TaskbarItemProgressState.Normal;
+                TaskInfo.ProgressValue = Math.Clamp(pct / 100.0, 0, 1);
+            }
+            else
+            {
+                TaskInfo.ProgressState = System.Windows.Shell.TaskbarItemProgressState.None;
+            }
+            TaskInfo.Description = _tray.Text;
+        }
+        catch { }
+    }
+
+    private void NavigateTo(string page)
+    {
+        try
+        {
+            RestoreWindow();
+            _page = page;
+            SendConfig();
+            PushSnapshot();
+            PostUi(new { type = "navigate", data = new { page } });
+        }
+        catch (Exception ex) { AppLogger.Error("NavigateTo: " + ex.Message); }
     }
 
     /// <summary>
@@ -371,8 +756,9 @@ public partial class MainWindow : Window
                     if (doc.RootElement.TryGetProperty("ms", out var msEl) && msEl.TryGetInt32(out int ms))
                     {
                         ms = Math.Clamp(ms, 1000, 10000);
-                        _config.RefreshMs = ms; _monitor.RefreshMs = ms; _config.Save();
-                        _sensorTimer.Change(0, ms);
+                        _config.RefreshMs = ms; _config.Save();
+                        lock (_monLock) { if (_monitor != null) _monitor.RefreshMs = ms; }
+                        ApplyPerformance(force: true); // el intervalo real lo decide el gobernador
                         SendConfig();
                     }
                     break;
@@ -393,7 +779,7 @@ public partial class MainWindow : Window
                     if (doc.RootElement.TryGetProperty("id", out var idEl))
                     {
                         _config.PreferredCpuSensor = idEl.GetString() ?? "auto";
-                        _monitor.PreferredCpuSensor = _config.PreferredCpuSensor;
+                        lock (_monLock) { if (_monitor != null) _monitor.PreferredCpuSensor = _config.PreferredCpuSensor; }
                         _config.Save();
                         PushSnapshot();
                     }
@@ -429,14 +815,60 @@ public partial class MainWindow : Window
                 case "resetSettings":
                     _config.ResetToDefaults();
                     _config.Save();
-                    _monitor.RefreshMs = _config.RefreshMs;
-                    _monitor.PreferredCpuSensor = _config.PreferredCpuSensor;
+                    lock (_monLock)
+                    {
+                        if (_monitor != null)
+                        {
+                            _monitor.RefreshMs = _config.RefreshMs;
+                            _monitor.PreferredCpuSensor = _config.PreferredCpuSensor;
+                        }
+                    }
                     _batteryService.ApplyOptions(BatteryAlertOptions.FromConfig(_config));
                     _fullService.ApplyOptions(FullOptions());
                     StartupManager.Apply(false);
-                    _sensorTimer.Change(0, _config.RefreshMs);
+                    ApplyPerformance(force: true);
                     SendConfig();
                     PushSnapshot();
+                    break;
+                case "setHotkey":
+                    if (doc.RootElement.TryGetProperty("value", out var hkEl))
+                    {
+                        _config.HotkeyEnabled = hkEl.GetBoolean();
+                        _config.Save();
+                        UnregisterHotkey();
+                        RegisterHotkey();
+                        SendConfig();
+                    }
+                    break;
+                case "setTaskbarBadge":
+                    if (doc.RootElement.TryGetProperty("value", out var tbbEl))
+                    {
+                        _config.TaskbarBadge = tbbEl.GetBoolean();
+                        _config.Save();
+                        UpdateTaskbar();
+                        SendConfig();
+                    }
+                    break;
+                case "setAdaptivePerf":
+                    if (doc.RootElement.TryGetProperty("value", out var apEl))
+                    {
+                        _config.AdaptivePerf = apEl.GetBoolean();
+                        _config.Save();
+                        ApplyPerformance(force: true);
+                        SendConfig();
+                    }
+                    break;
+                case "health":
+                    {
+                        string cls = doc.RootElement.TryGetProperty("cls", out var clsEl)
+                            ? (clsEl.GetString() ?? "ok") : "ok";
+                        if (cls != "ok" && cls != "warn" && cls != "crit") cls = "ok";
+                        if (cls != _health) { _health = cls; UpdateTaskbar(); }
+                    }
+                    break;
+                case "openWindowsSettings":
+                    if (doc.RootElement.TryGetProperty("key", out var wsEl))
+                        SystemInfo.OpenWindowsSettings(wsEl.GetString() ?? "");
                     break;
                 case "restartAdmin": RestartAsAdmin(); break;
                 case "openMini": OpenMini(); break;
@@ -499,14 +931,12 @@ public partial class MainWindow : Window
                     if (doc.RootElement.TryGetProperty("page", out var pgEl))
                     {
                         _page = pgEl.GetString() ?? "resumen";
-                        _monitor.IncludeAllSensors = _page == "sensores";
+                        lock (_monLock) { if (_monitor != null) _monitor.IncludeAllSensors = _page == "sensores"; }
                         if (_page == "sensores") PushSnapshot();
                     }
                     break;
                 case "winMin": WindowState = WindowState.Minimized; break;
-                case "winMax":
-                    WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
-                    break;
+                case "winMax": ToggleMaximize(); break;
                 case "winClose": Close(); break;
             }
         }
@@ -558,6 +988,7 @@ public partial class MainWindow : Window
             Sensors.Snapshot snap;
             lock (_monLock)
             {
+                if (_monitor == null) return; // aún abriendo el lector (arranque rápido)
                 _monitor.IncludeAllSensors = _page == "sensores";
                 snap = _monitor.GetSnapshot();
             }
@@ -569,12 +1000,14 @@ public partial class MainWindow : Window
                 snap.Meta.AppMemoryMb = Math.Round(_self.WorkingSet64 / 1048576.0, 1);
             }
             catch { }
+            _lastSnap = snap;
             string json = JsonSerializer.Serialize(new { type = "snapshot", data = snap }, _jsonOpts);
             Dispatcher.BeginInvoke(() =>
             {
                 try { _core?.PostWebMessageAsJson(json); }
                 catch (Exception ex) { AppLogger.Error("PostMessage: " + ex.Message); }
                 try { UpdateTray(snap); } catch { }
+                try { UpdateTaskbar(); } catch { }
                 try { _mini?.Update(snap); } catch { }
             });
         }
@@ -610,7 +1043,25 @@ public partial class MainWindow : Window
                     miniSeries = _config.MiniSeries,
                     miniExpanded = _config.MiniExpanded,
                     glass = _glassMode,
-                    version = UpdateService.Current().ToString()
+                    version = UpdateService.Current().ToString(),
+                    // v3.0.0 — integración con Windows y rendimiento adaptativo.
+                    adaptivePerf = _config.AdaptivePerf,
+                    hotkeyEnabled = _config.HotkeyEnabled,
+                    taskbarBadge = _config.TaskbarBadge,
+                    effectiveMs = _effectiveMs,
+                    perf = _perfMode,
+                    os = new
+                    {
+                        name = _osName,
+                        build = _osBuild,
+                        win11 = _osWin11,
+                        accent = _osAccent,
+                        theme = SystemInfo.IsLightTheme() ? "light" : "dark",
+                        highContrast = SystemInfo.HighContrast,
+                        powerSaver = SystemInfo.PowerSaverActive(),
+                        hotkey = _hotkeyRegistered,
+                        glass = _glassMode
+                    }
                 }
             }, _jsonOpts);
             Dispatcher.BeginInvoke(() =>
@@ -646,11 +1097,12 @@ public partial class MainWindow : Window
             AppLogger.Info("Reciclando lector de sensores para reintentar despliegue del driver.");
             lock (_monLock)
             {
-                try { _monitor.Dispose(); } catch { }
+                try { _monitor?.Dispose(); } catch { }
                 _monitor = new HardwareMonitor
                 {
                     RefreshMs = _config.RefreshMs,
-                    PreferredCpuSensor = _config.PreferredCpuSensor
+                    PreferredCpuSensor = _config.PreferredCpuSensor,
+                    IncludeAllSensors = _page == "sensores"
                 };
             }
         }
@@ -665,7 +1117,11 @@ public partial class MainWindow : Window
             // Se reutiliza la última lectura del monitor (ya usa capacidades
             // reales de root\wmi): sin duplicar consultas WMI.
             BatteryData bat;
-            lock (_monLock) bat = _monitor.LastBattery;
+            lock (_monLock)
+            {
+                if (_monitor == null) return; // aún abriendo el lector
+                bat = _monitor.LastBattery;
+            }
             if (!bat.Present || bat.Percent is not double pct) return;
             if (pct < 0 || pct > 100) return;
             bool charging = bat.Charging ?? false;
@@ -887,7 +1343,7 @@ public partial class MainWindow : Window
         // Minimizar a la bandeja en lugar de cerrar
         e.Cancel = true;
         Hide();
-        _ = SetWebVisibleAsync(false); // libera RAM del motor de interfaz
+        ApplyPerformance(); // visible=false: suspende el motor y baja el intervalo
         _tray.ShowBalloonTip(4000, "TempPanel", "TempPanel sigue ejecutándose en la bandeja del sistema.", System.Windows.Forms.ToolTipIcon.Info);
     }
 
@@ -901,7 +1357,7 @@ public partial class MainWindow : Window
         Show();
         WindowState = WindowState.Normal;
         Activate();
-        _ = SetWebVisibleAsync(true); // reanuda el motor de interfaz
+        ApplyPerformance(); // reanuda el motor de interfaz
     }
 
     private void OpenMini()
@@ -920,7 +1376,7 @@ public partial class MainWindow : Window
                 _mini.Activate();
             }
             Hide(); // la principal se esconde; la mini queda fija encima
-            _ = SetWebVisibleAsync(false); // la mini es nativa: no necesita el motor grande
+            ApplyPerformance(); // la mini es nativa: no necesita el motor grande
         }
         catch (Exception ex) { AppLogger.Error("OpenMini: " + ex.Message); }
     }
@@ -940,10 +1396,13 @@ public partial class MainWindow : Window
 
     private void Cleanup()
     {
+        try { _perfTimer.Stop(); } catch { }
+        UnregisterHotkey();
+        UnsubscribeSystemEvents();
         try { _sensorTimer.Dispose(); } catch { }
         try { _batteryTimer.Dispose(); } catch { }
         try { _recycleTimer.Dispose(); } catch { }
-        try { _monitor.Dispose(); } catch { }
+        try { lock (_monLock) { _monitor?.Dispose(); _monitor = null; } } catch { }
         try
         {
             if (_mini != null) { try { _mini.Close(); } catch { } _mini = null; }

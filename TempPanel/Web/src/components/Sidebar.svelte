@@ -19,7 +19,7 @@
     {#each items as it (it.page)}
       <button class="nav-btn" class:active={app.page === it.page} data-page={it.page}
               onclick={() => setPage(it.page)} title="{it.label} ({it.key})">
-        <i>{it.icon}</i>{it.label}
+        <i>{it.icon}</i><span class="nav-label">{it.label}</span>
         <span class="nav-key">{it.key}</span>
       </button>
     {/each}

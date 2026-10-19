@@ -109,14 +109,18 @@ public partial class App : System.Windows.Application
     private void StartUiCheck(MainWindow win)
     {
         var deadline = DateTime.UtcNow.AddSeconds(30);
+        var sensorsDeadline = DateTime.UtcNow.AddSeconds(20);
         var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
         timer.Tick += (_, __) =>
         {
             if (!win.UiReady && DateTime.UtcNow <= deadline) return;
+            // Con la interfaz lista, se espera también al lector de sensores
+            // (como máximo 20 s) para dejar evidencia en el log.
+            if (win.UiReady && !win.SensorsReady && DateTime.UtcNow <= sensorsDeadline) return;
             timer.Stop();
             bool ok = win.UiReady;
             string control = win.GlassActive ? "cristal (transparencia)" : "clásico (opaco)";
-            if (ok) AppLogger.Info($"UICHECK OK: interfaz cargada · control {control}");
+            if (ok) AppLogger.Info($"UICHECK OK: interfaz cargada · control {control} · sensores {(win.SensorsReady ? "listos" : "no listos")}");
             else AppLogger.Error($"UICHECK FALLO: la interfaz no cargó en 30 s · control {control}");
             Environment.Exit(ok ? 0 : 1);
         };

@@ -1,5 +1,12 @@
 # Tutorial TempPanel — por qué no sale la temperatura y cómo solucionarlo
 
+> **Novedades v3.0.0**: atajo global **Ctrl+Alt+T** para mostrar/ocultar la app,
+> Snap Layouts en Windows 11, distintivo y progreso de carga en la barra de
+> tareas, accesos directos en la bandeja, tema/acento/alto contraste del sistema
+> y rendimiento adaptativo (3-5 s y motor suspendido cuando no miras la app).
+> Nada de esto cambia los requisitos de las temperaturas: siguen necesitando
+> permisos de administrador y el driver **PawnIO**.
+
 ## Lo que ya funciona sin tocar nada
 
 Aunque la temperatura no aparezca, TempPanel sí muestra datos reales:
@@ -51,18 +58,17 @@ a activarla cuando quieras (repite los pasos al revés).
 ### Si el estado dice «Ni se desplegó» (antivirus)
 
 Aunque seas administrador, el antivirus puede poner en cuarentena el archivo
-del driver (WinRing0) en cuanto LibreHardwareMonitor lo extrae, antes de que
-Windows lo bloquee siquiera. Compruébalo:
+del driver (PawnIO) antes de que Windows lo cargue. Compruébalo:
 
 1. Abre **Seguridad de Windows → Protección contra virus y amenazas →
    Historial de protección**.
-2. Busca **WinRing0** (puede aparecer como HackTool o controlador vulnerable).
+2. Busca **PawnIO** o el controlador que TempPanel intentó cargar.
 3. Si está: elígela → **Acciones → Permitir/Restaurar** (solo si confías en
-   TempPanel; el driver es de código abierto, el mismo que usan LibreHardwareMonitor
-   y proyectos afines). Alternativa: añade una exclusión para ese archivo.
+   TempPanel; PawnIO es el driver oficial firmado que usa LibreHardwareMonitor).
+   Alternativa: añade una exclusión para ese archivo.
 4. Cierra TempPanel del todo y **reábelo como administrador**.
 5. Mira Ayuda → «Estado del driver»: debería pasar a «Funcionando» y aparecer
-   las temperaturas.
+   las temperaturas. Si no aparece, instálalo desde **pawnio.eu** y reabre la app.
 
 ## Métodos alternativos buscados en este equipo (2026-10-09)
 

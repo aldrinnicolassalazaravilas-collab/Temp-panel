@@ -83,6 +83,12 @@ public sealed class AppConfig
     public bool MiniExpanded { get; set; } = false;
     public double? MiniLeft { get; set; }
     public double? MiniTop { get; set; }
+    // v3.0.0 — integración con Windows:
+    // atajo global Ctrl+Alt+T, distintivo en la barra de tareas y reducción
+    // adaptativa de actividad (segundo plano / pantalla completa / ahorro).
+    public bool HotkeyEnabled { get; set; } = true;
+    public bool TaskbarBadge { get; set; } = true;
+    public bool AdaptivePerf { get; set; } = true;
 
     public static readonly string[] MiniSeriesKeys = { "cpu", "temp", "bat", "ram", "gpu" };
 
@@ -137,6 +143,9 @@ public sealed class AppConfig
         MiniExpanded = fresh.MiniExpanded;
         MiniLeft = null;
         MiniTop = null;
+        HotkeyEnabled = fresh.HotkeyEnabled;
+        TaskbarBadge = fresh.TaskbarBadge;
+        AdaptivePerf = fresh.AdaptivePerf;
         // FirstRun NO se restablece: la bienvenida solo sale una vez.
     }
 

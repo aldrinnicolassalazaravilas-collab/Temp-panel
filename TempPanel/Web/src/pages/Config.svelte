@@ -1,5 +1,5 @@
 <script>
-  import { app, cmd, toast, saveUiPrefs } from "../lib/state.svelte.js";
+  import { app, cmd, toast, saveUiPrefs, PERF_LABELS } from "../lib/state.svelte.js";
   import Card from "../components/Card.svelte";
   import Kv from "../components/Kv.svelte";
 
@@ -74,8 +74,21 @@
     { k: "Interfaz", v: `Svelte ${__SVELTE_VERSION__} compilada a HTML/JS/CSS local (sin CDN)` },
     { k: "WebView2", v: "Microsoft.Web.WebView2 1.0.4258.31 (runtime del sistema)" },
     { k: "Cristal de Windows", v: app.cfg.glass ? "Activado (acrílico + esquinas redondeadas)" : "No disponible: tema oscuro sólido" },
-    { k: "Ahorro de RAM", v: "Motor de interfaz suspendido al minimizar o usar la mini ventana" },
+    { k: "Ahorro de RAM", v: "Tabla de sensores virtualizada y motor de interfaz suspendido al minimizar, usar la mini ventana o jugar a pantalla completa" },
+    { k: "Integración con Windows", v: "Atajo global, Snap Layouts, barra de tareas, eventos de energía y tema del sistema" },
     { k: ".NET", v: "8.0 autocontenido x64" }
+  ]);
+
+  // v3.0.0 — datos reales que envía la app nativa (no se inventan).
+  let osRows = $derived([
+    { k: "Sistema", v: app.cfg.os?.name ? `${app.cfg.os.name} (build ${app.cfg.os.build})` : "Windows" },
+    { k: "Tema del sistema", v: app.cfg.os?.theme === "light" ? "Claro (TempPanel conserva su tema oscuro)" : "Oscuro" },
+    { k: "Color de acento", v: app.cfg.os?.accent || "#4f8cff" },
+    { k: "Alto contraste", v: app.cfg.os?.highContrast ? "Activado (se respeta en toda la interfaz)" : "Desactivado" },
+    { k: "Ahorro de energía", v: app.cfg.os?.powerSaver ? "Activo en Windows" : "Inactivo" },
+    { k: "Atajo Ctrl+Alt+T", v: app.cfg.os?.hotkey ? "Registrado" : "No registrado (lo usa otra app o está desactivado)" },
+    { k: "Snap Layouts", v: app.cfg.os?.glass ? "Sí: pasa el ratón por el botón maximizar" : "Solo con cristal (Windows 11)" },
+    { k: "Ritmo actual", v: `${((app.cfg.effectiveMs || app.cfg.refreshMs) / 1000)} s · ${PERF_LABELS[app.cfg.perf] || "primer plano"}` }
   ]);
 
   function alphaInput(e) {
@@ -90,7 +103,8 @@
   </label>
   <button id="btn-save-refresh" class="btn" onclick={applyRefresh}>Aplicar</button>
   <div class="muted small">Predeterminado: cada 2 segundos. Para gráficas cada 1 s, pon 1.
-    Intervalos muy cortos aumentan la carga del equipo.</div>
+    Este es el ritmo en primer plano; en segundo plano o con un juego a pantalla completa la app
+    puede espaciarlo para consumir menos (ver «Integración con Windows»).</div>
   <label class="fld">Unidades de temperatura:
     <select id="cfg-unit" bind:value={app.cfg.unit} onchange={() => cmd.setUnit(app.cfg.unit)}>
       <option value="C">Celsius (°C)</option>
@@ -129,6 +143,23 @@
   <div class="muted small">Avisa una vez por ciclo de carga, solo cargando. Vuelve a avisar cuando baja
     del segundo valor. «Probar» muestra el aspecto sin fingir un nivel real. Notificar no detiene la
     carga física.</div>
+</Card>
+
+<Card title="⊞ Integración con Windows">
+  <Kv rows={osRows} />
+  <label class="fld"><input type="checkbox" id="cfg-hotkey" bind:checked={app.cfg.hotkeyEnabled}
+    onchange={() => cmd.setHotkey(!!app.cfg.hotkeyEnabled)}> Atajo global <b>Ctrl+Alt+T</b> para mostrar u ocultar TempPanel</label>
+  <label class="fld"><input type="checkbox" id="cfg-taskbar-badge" bind:checked={app.cfg.taskbarBadge}
+    onchange={() => cmd.setTaskbarBadge(!!app.cfg.taskbarBadge)}> Distintivo de alerta y progreso de carga en la barra de tareas</label>
+  <label class="fld"><input type="checkbox" id="cfg-adaptive" bind:checked={app.cfg.adaptivePerf}
+    onchange={() => cmd.setAdaptivePerf(!!app.cfg.adaptivePerf)}> Reducir actividad en segundo plano, pantalla completa o ahorro de energía</label>
+  <div class="muted small">Primer plano: el intervalo que elijas. Sin foco: mínimo 3 s. Oculto, minimizado,
+    bloqueado o con otra app a pantalla completa: 5 s y motor de interfaz suspendido. El resto de avisos
+    (batería) sigue funcionando.</div>
+  <div class="toolbar" style="margin-top:8px">
+    <button id="btn-win-colors" class="btn ghost" onclick={() => cmd.openWindowsSettings("colors")}>🎨 Colores de Windows</button>
+    <button id="btn-win-battery" class="btn ghost" onclick={() => cmd.openWindowsSettings("battery")}>🔋 Ahorro de energía</button>
+  </div>
 </Card>
 
 <Card title="Inicio y bandeja">

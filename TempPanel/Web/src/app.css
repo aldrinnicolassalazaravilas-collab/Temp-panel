@@ -282,11 +282,39 @@ body.immersive #main{padding-top:6px}
 .welcome-card h2{margin:0 0 10px;font-size:20px;font-weight:600;
   background:linear-gradient(90deg,var(--cyan),var(--blue));-webkit-background-clip:text;background-clip:text;color:transparent}
 
+/* ---------- v3.0.0: integración con Windows ----------
+   El nativo envía el color de acento, el alto contraste y el modo de
+   rendimiento. El diseño no cambia: solo se adaptan acentos y bordes. */
+:root{--os-accent:#4f8cff}
+.tb-btn.os-hover{background:rgba(255,255,255,.09);color:var(--txt)}
+.alert.info{background:rgba(79,140,255,.12);border:1px solid rgba(79,140,255,.45);color:#bcd4ff;font-weight:500}
+body.hc{--line:rgba(255,255,255,.34);--line2:rgba(255,255,255,.62);--muted:#dce7ff;--muted2:#cbd9f5;
+  --panel-a:.52;--card-a:.10;--scrim-a:.55}
+body.hc .bg .aurora,body.hc .bg .grid-bg,body.hc .bg .sheen{display:none}
+body.hc *{animation:none!important;transition:none!important}
+body.hc .card,body.hc #topbar,body.hc #sidebar{border-color:var(--line2)}
+body.hc .card::before{display:none}
+
+/* ---------- v3.0.0: ventanas estrechas (820-980 px) -> barra de iconos ---------- */
+@media(max-width:980px){
+  #sidebar{width:78px;min-width:78px;padding:12px 8px}
+  .nav-label,.nav-key{display:none}
+  .nav-btn{justify-content:center;padding:10px 0;gap:0}
+  .side-footer{padding:11px 0 2px;justify-content:center}
+  .side-footer #conn-text{display:none}
+  body.immersive #sidebar{margin-left:-110px}
+}
+
+/* ---------- v3.0.0: tabla de sensores virtualizada ---------- */
+#sensor-table tbody tr.row{height:34px}
+#sensor-table tbody tr.spacer td{padding:0;border:0}
+#sensor-table tbody tr.spacer:hover{background:transparent}
+
 ::-webkit-scrollbar{width:10px;height:10px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:rgba(148,163,184,.22);border-radius:8px;border:2px solid transparent;
   background-clip:content-box}
 ::-webkit-scrollbar-thumb:hover{background:rgba(148,163,184,.4);background-clip:content-box}
-button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--os-accent);outline-offset:2px}
 @media(max-width:760px){.gaugewrap{flex-direction:column;align-items:flex-start}.gauge{width:150px}
-  #main{padding:10px 10px 0}#sidebar{margin:10px 0 10px 10px}}
+  #main{padding:10px 10px 0}#sidebar{margin:10px 0 10px 10px;width:78px;min-width:78px}}

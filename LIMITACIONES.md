@@ -1,4 +1,4 @@
-# Limitaciones conocidas — TempPanel 2.5.1
+# Limitaciones conocidas — TempPanel 3.0.0
 
 Verificadas en Lenovo IdeaPad Slim 3 15IRH10 (i7-13620H, 24 GB, Intel UHD)
 con Windows 11 Pro (build 26200).
@@ -46,14 +46,17 @@ con Windows 11 Pro (build 26200).
    acrílico no está disponible) la app usa el tema oscuro sólido, con las
    mismas funciones. El cristal translúcido y las esquinas redondeadas son
    característica de Windows 11.
-10. **Consumo (MEJORADO en 2.5.0)**: con la GUI abierta el conjunto de trabajo
-    depende del sistema (autocontenida + WebView2) y se ve en
+10. **Consumo (MEJORADO en 2.5.0 y 3.0.0)**: con la GUI abierta el conjunto de
+    trabajo depende del sistema (autocontenida + WebView2) y se ve en
     **Resumen → Sistema → «Memoria de la app»**. Al minimizar, ocultar a la
-    bandeja o abrir la mini ventana, el motor WebView2 se **suspende**
-    (CPU en reposo y memoria liberada) mientras los sensores siguen
-    muestreándose cada 2 s. La lista completa de sensores solo se lee cuando
-    «Todos los sensores» está a la vista. Pausar congela gráficas e historial
-    sin detener la lectura.
+    bandeja, abrir la mini ventana, bloquear la sesión o tener otra app a
+    pantalla completa, el motor WebView2 se **suspende** (CPU en reposo y
+    memoria liberada) y los sensores pasan a 5 s; sin foco visible, mínimo 3 s.
+    En primer plano se respeta el intervalo elegido. La reducción adaptativa se
+    puede desactivar en **Configuración → Integración con Windows**.
+    La lista completa de sensores solo se lee cuando «Todos los sensores» está
+    a la vista, y la tabla ahora se virtualiza (solo se dibujan las filas
+    visibles). Pausar congela gráficas e historial sin detener la lectura.
 11. **Almacenamiento**: `MSStorageDriver_FailurePredictData` sin instancias y
     `Get-StorageReliabilityCounter` no disponible en este equipo; no hay fuente
     de temperatura de disco sin drivers de terceros.
@@ -64,3 +67,33 @@ con Windows 11 Pro (build 26200).
     seguro/verificable para este modelo). No probada con carga real al 80 % (la
     batería estaba descargando durante las pruebas); lógica verificada con
     pruebas automatizadas + ventana OK verificada por automatización UIA.
+14. **Atajo global Ctrl+Alt+T (v3.0.0)**: si otra aplicación ya lo usa, Windows
+    no lo concede; Configuración → Integración con Windows muestra el estado
+    real («No registrado») y se puede desactivar. Como cualquier atajo de
+    Windows, no se recibe mientras un juego exclusivo a pantalla completa tiene
+    el foco (en ese caso la app ya está reducida a 5 s).
+15. **Snap Layouts (v3.0.0)**: el menú de distribuciones al pasar el ratón por
+    maximizar es una función de **Windows 11**. En Windows 10 el botón sigue
+    maximizando/restaurando con normalidad, pero el sistema no muestra el menú.
+    Solo se activa en modo cristal (el modo opaco conserva el clic normal del
+    HTML).
+16. **Barra de tareas (v3.0.0)**: el distintivo aparece cuando la interfaz
+    detecta una alerta térmica (amarillo/rojo) y el progreso solo mientras la
+    batería está cargando. Con la ventana en la bandeja no hay botón en la barra
+    de tareas (no hay nada que mostrar), pero el tooltip del icono sigue vivo.
+17. **Tema y color de acento (v3.0.0)**: TempPanel conserva su diseño oscuro
+    aunque Windows esté en tema claro; el color de acento del sistema se usa en
+    los anillos de foco y se muestra en Configuración. El **alto contraste** sí
+    se respeta: refuerza bordes, texto y desactiva animaciones. Cambiar el tema
+    o el acento de Windows se refleja sin reiniciar la app.
+18. **Detección de pantalla completa (v3.0.0)**: se considera pantalla completa
+    cualquier ventana de otro proceso que cubra al menos el 98 % de su monitor
+    (juegos, vídeo, presentaciones). Es intencionado para ahorrar mientras no
+    miras la app; si te molesta que una presentación reduzca el ritmo, desactiva
+    la reducción adaptativa.
+19. **Arquitectura**: la build publicada es **x64**. En Windows 11 ARM64
+    funciona por emulación (más lenta que una build nativa); no hay binario
+    ARM64 publicado. Windows 10 x64 está soportado con el tema sólido.
+20. **Ventana mínima 820×560 (v3.0.0)**: por debajo de 980 px de ancho la barra
+    lateral pasa a iconos para no recortar el contenido; no se admite una
+    ventana más pequeña que 820×560 (evita gráficas ilegibles).
