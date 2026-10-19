@@ -25,7 +25,7 @@ Windows-only repo (WPF .NET 8 app + xUnit tests + Inno Setup installer). Shell t
 ```powershell
 C:\Program` Files\dotnet\dotnet.exe test C:\tempanel\TempPanel.sln -c Release   # build + 70 tests
 cd C:\tempanel\TempPanel\Web; npm run build        # interfaz Svelte -> TempPanel\Frontend (necesita npm; la app publicada NO)
-node C:\tempanel\uitest\run.js                     # 49 comprobaciones DOM sobre el bundle compilado
+node C:\tempanel\uitest\run.js                     # 52 comprobaciones DOM sobre el bundle compilado
 node C:\tempanel\uitest\preview.js                 # genera Frontend\_preview.html (datos reales del selftest)
 node C:\tempanel\uitest\csslint.js                 # CSS compilado + fuente, paréntesis balanceados
 C:\Program` Files\dotnet\dotnet.exe publish C:\tempanel\TempPanel\TempPanel.csproj -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true -o C:\tempanel\publish\v2.5.0

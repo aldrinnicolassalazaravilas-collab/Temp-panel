@@ -151,7 +151,7 @@ Panel de control → Programas → TempPanel → Desinstalar. Solo borra lo suyo
 - Interfaz: `cd TempPanel\Web` → `npm install` (solo la primera vez) →
   `npm run build`. El resultado se commitea en `TempPanel/Frontend/`, así que
   **publicar la app no necesita Node**.
-- Comprobaciones: `node uitest\run.js` (49 pruebas DOM reales sobre el bundle,
+- Comprobaciones: `node uitest\run.js` (52 pruebas DOM reales sobre el bundle,
   con JSDOM), `node uitest\preview.js` (genera `Frontend/_preview.html` con el
   puente emulado y datos reales del `--selftest`), `node uitest\csslint.js`
   (paréntesis desbalanceados en CSS, error silencioso clásico).

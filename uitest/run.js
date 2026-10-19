@@ -8,7 +8,7 @@
 //   node C:\tempanel\uitest\run.js
 const fs = require('fs');
 const path = require('path');
-const { JSDOM } = require(path.join(__dirname, 'node_modules', 'jsdom'));
+const { JSDOM, VirtualConsole } = require(path.join(__dirname, 'node_modules', 'jsdom'));
 
 const feDir = 'C:/tempanel/TempPanel/Frontend';
 const html = fs.readFileSync(path.join(feDir, 'index.html'), 'utf8');
@@ -40,10 +40,18 @@ function anyStub() {
 
 let msgHandler = null;
 const sent = [];
+const blobs = [];      // descargas capturadas (CSV, registro de sesión)
+const jsErrors = [];   // errores de ejecución de la página (los "not implemented" de JSDOM no cuentan)
+const vc = new VirtualConsole();
+vc.on("jsdomError", (e) => {
+  const m = String((e && e.message) || e);
+  if (!/Not implemented/i.test(m)) jsErrors.push(m);
+});
 const dom = new JSDOM(html, {
   url: 'https://temppanel.local/index.html',
   runScripts: 'outside-only',
   pretendToBeVisual: true,
+  virtualConsole: vc,
   beforeParse(window) {
     window.chrome = {
       webview: {
@@ -54,7 +62,7 @@ const dom = new JSDOM(html, {
     // JSDOM no dibuja canvas ni tiene ResizeObserver: se emulan (no se comprueba el píxel, sí el DOM).
     window.HTMLCanvasElement.prototype.getContext = function () { return anyStub(); };
     window.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
-    window.URL.createObjectURL = () => 'blob:test';
+    window.URL.createObjectURL = (b) => { blobs.push(b); return 'blob:test'; };
     window.URL.revokeObjectURL = () => {};
   }
 });
@@ -87,7 +95,7 @@ function makeSnap(i) {
       tjMaxNames: ['P-Core #1 Distance to TjMax'], tjMaxDistances: [45.7], tjMaxC: 100,
       coresPhysical: 10, coresLogical: 16
     },
-    gpu: { name: 'Intel UHD', temp: 48.0, tempSource: 'GPU Temperature (test)', load: 6.5, clock: 1200, memoryUsedMb: null, available: true, note: null },
+    gpu: { name: 'Intel UHD', temp: i === 2 ? null : 48.0, tempSource: i === 2 ? null : 'GPU Temperature (test)', load: 6.5, clock: 1200, memoryUsedMb: null, available: true, note: null },
     memory: { totalMb: 24237, usedMb: 18916, availableMb: 5321, percentUsed: 78.0, source: 'test' },
     battery: {
       present: true, percent: 79.7, status: 'Cargando · retenida por el equipo', charging: true,
@@ -195,6 +203,17 @@ function check(name, ok) {
   check('historial: chips de rango y métrica', doc.querySelectorAll('#page-historial .chip').length >= 9);
   check('historial: gráfica grande', !!doc.querySelector('#page-historial canvas'));
   check('historial: estadísticas', has('#page-historial', 'Mín:'));
+  const csvBtn = doc.getElementById('btn-csv');
+  if (csvBtn) { csvBtn.click(); await flush(80); }
+  let csv = '';
+  if (blobs.length) {
+    const b = blobs[blobs.length - 1];
+    try { csv = b.text ? await b.text() : ''; } catch (e) { csv = ''; }
+  }
+  const csvLines = csv.split('\n');
+  check('historial: CSV con cabecera y 5 filas',
+    csvLines.length === 6 && csvLines[0] === 'timestamp,cpu_temp_c,cpu_load_pct,ram_used_mb,gpu_temp_c,bat_pct');
+  check('historial: CSV deja vacíos los nulos', csv.includes(',,'));
 
   // ---- Ayuda ----
   clickPage('ayuda');
@@ -249,6 +268,9 @@ function check(name, ok) {
   const pause = doc.getElementById('btn-pause');
   if (pause) { pause.click(); await flush(40); }
   check('pausa activa', (doc.getElementById('btn-pause') || {}).textContent.includes('Reanudar'));
+
+  check('sin errores de ejecución en la página', jsErrors.length === 0);
+  if (jsErrors.length) console.log('   ' + jsErrors.slice(0, 3).join('\n   '));
 
   console.log(fail ? '\n' + fail + ' comprobaciones FALLIDAS' : '\nTODO OK');
   process.exit(fail ? 1 : 0);

@@ -24,7 +24,7 @@ pudo comprobar se dice explícitamente en §9.
   - Alerta de batería: dispara cargando al umbral, no descargando, una vez por
     ciclo, rearma por debajo del valor, valida rearma < alerta, nivel nulo nunca
     dispara. Niveles simulados SOLO en tests.
-- **DOM real sobre el bundle compilado** (`node uitest\run.js`) → **49/49 OK**:
+- **DOM real sobre el bundle compilado** (`node uitest\run.js`) → **52/52 OK**:
   montaje, cristal (`body.glass`), barra de título y botones de ventana,
   10 páginas, tarjetas/medidor/anillo/minigráficos/gráficas, valores concretos
   del snapshot sintético, sesión CPU, tendencia calculada, barras por núcleo,
@@ -33,7 +33,9 @@ pudo comprobar se dice explícitamente en §9.
   historial (chips, gráfica, estadísticas), ayuda (diagnóstico, Defender, HVCI),
   configuración (chips de mini ventana, versión, transparencia),
   **protocolo completo de 29 comandos** hacia la app nativa, bienvenida y su
-  comando, banner crítico a 96 °C y pausa.
+  comando, banner crítico a 96 °C y pausa. Además: exportación **CSV** con la
+  cabecera exacta, una fila por lectura y los huecos vacíos (nunca ceros), y
+  ausencia de errores de ejecución en la página durante todo el recorrido.
 - **CSS**: `node uitest\csslint.js` → 197 bloques (fuente) + 200 (compilado),
   0 paréntesis desbalanceados (la errata que dejó sin efecto el degradado de
   `#app::before` en v2.5.0 se detectó y corrigió con esta herramienta).
