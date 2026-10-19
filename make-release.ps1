@@ -1,11 +1,11 @@
-# Crea el Release v2.5.1 en GitHub y sube el instalador como asset.
+# Crea el Release v3.0.0 en GitHub y sube el instalador como asset.
 # Usa la credencial ya guardada en el equipo (no pide ni muestra secretos).
-# Ejecutar cuando dist\TempPanel-Setup-x64.exe sea el build v2.5.1 final.
+# Ejecutar cuando dist\TempPanel-Setup-x64.exe sea el build v3.0.0 final.
 $ErrorActionPreference = "Stop"
 
 $owner = "aldrinnicolassalazaravilas-collab"
 $repo = "Temp-panel"
-$tag = "v2.5.1"
+$tag = "v3.0.0"
 $asset = "C:\tempanel\dist\TempPanel-Setup-x64.exe"
 
 if (-not (Test-Path $asset)) { Write-Output "FALTA asset: $asset"; exit 1 }
@@ -25,7 +25,7 @@ if (-not $rel) {
   Write-Output "Creando release $tag..."
   # [string] fuerza un String real: en PS 5.1 Get-Content -Raw adjunta propiedades
   # del proveedor y ConvertTo-Json serializaria {"value": ...} en vez del texto.
-  $notes = [string](Get-Content "C:\tempanel\release-notes-v2.5.1.md" -Raw -Encoding UTF8)
+  $notes = [string](Get-Content "C:\tempanel\release-notes-v3.0.0.md" -Raw -Encoding UTF8)
   $json = @{ tag_name = $tag; name = "TempPanel $tag"; draft = $false; prerelease = $false;
     body = $notes } | ConvertTo-Json
   # Enviar bytes UTF-8: con un string, PS 5.1 usa la codificación ANSI y los
